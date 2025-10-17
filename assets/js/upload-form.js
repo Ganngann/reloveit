@@ -21,7 +21,8 @@
                 data: formData,
                 processData: false,
                 contentType: false,
-                beforeSend: function() {
+                beforeSend: function(xhr) {
+                    xhr.setRequestHeader('X-WP-Nonce', relovit_ajax.nonce);
                     resultsDiv.html('<p>Analyse de l\'image en cours...</p>');
                     submitButton.prop('disabled', true);
                 },
@@ -59,7 +60,8 @@
                 url: relovit_ajax.create_url,
                 type: 'POST',
                 data: formData,
-                beforeSend: function() {
+                beforeSend: function(xhr) {
+                    xhr.setRequestHeader('X-WP-Nonce', relovit_ajax.nonce);
                     resultsDiv.html('<p>Création des brouillons en cours...</p>');
                 },
                 success: function(response) {

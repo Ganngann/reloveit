@@ -71,6 +71,7 @@ class Frontend {
                 [
                     'identify_url' => rest_url( 'relovit/v1/identify-objects' ),
                     'create_url'   => rest_url( 'relovit/v1/create-products' ),
+                    'nonce'        => wp_create_nonce( 'wp_rest' ),
                 ]
             );
         }
