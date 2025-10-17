@@ -252,6 +252,32 @@ class API {
             }
         }
 
+        $generate_image = $request->get_param( 'relovit_generate_image' );
+
+        if ( $generate_image && ! empty( $image_paths ) ) {
+            $generated_image_data = $gemini_api->generate_image( $image_paths[0] );
+
+            if ( ! is_wp_error( $generated_image_data ) ) {
+                // Upload the generated image from base64 data.
+                $upload = wp_upload_bits( 'generated-image.png', null, base64_decode( $generated_image_data ) );
+                if ( ! $upload['error'] ) {
+                    $attachment = [
+                        'post_mime_type' => 'image/png',
+                        'post_title'     => $product_name . ' - AI Generated',
+                        'post_content'   => '',
+                        'post_status'    => 'inherit',
+                    ];
+                    $new_attachment_id = wp_insert_attachment( $attachment, $upload['file'], $product_id );
+                    if ( ! is_wp_error( $new_attachment_id ) ) {
+                        require_once ABSPATH . 'wp-admin/includes/image.php';
+                        $attachment_data = wp_generate_attachment_metadata( $new_attachment_id, $upload['file'] );
+                        wp_update_attachment_metadata( $new_attachment_id, $attachment_data );
+                        $product->set_image_id( $new_attachment_id );
+                    }
+                }
+            }
+        }
+
         // Update the product.
         $product->set_description( $description );
         $product->set_regular_price( floatval( $price ) );

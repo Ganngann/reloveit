@@ -186,4 +186,62 @@ class Gemini_API {
         $prompt     = "En te basant sur le nom du produit '" . esc_html( $product_name ) . "' et les images fournies, choisis la catégorie la plus pertinente dans la liste suivante : " . implode( ', ', $categories ) . ". Réponds uniquement avec le slug de la catégorie (par exemple : 'livres').";
         return $this->call_vision_api( $prompt, $image_paths );
     }
+
+    /**
+     * Generate a new product image with a clean background.
+     *
+     * @param string $image_path Path to the original image.
+     * @return string|WP_Error The URL of the generated image, or an error.
+     */
+    public function generate_image( $image_path ) {
+        $api_key = get_option( 'relovit_gemini_api_key' );
+        if ( empty( $api_key ) ) {
+            return new \WP_Error( 'api_key_missing', __( 'The Gemini API key is missing.', 'relovit' ) );
+        }
+
+        $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=' . $api_key;
+        $prompt  = "Extrayez l'objet principal de cette image et placez-le sur un fond de studio blanc et propre. L'image générée doit être photoréaliste et de haute qualité.";
+
+        $body = [
+            'contents' => [
+                'parts' => [
+                    [ 'text' => $prompt ],
+                    [
+                        'inline_data' => [
+                            'mime_type' => mime_content_type( $image_path ),
+                            'data'      => base64_encode( file_get_contents( $image_path ) ),
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $response = wp_remote_post(
+            $api_url,
+            [
+                'body'    => json_encode( $body ),
+                'headers' => [ 'Content-Type' => 'application/json' ],
+                'timeout' => 120, // Image generation can be slow.
+            ]
+        );
+
+        if ( is_wp_error( $response ) ) {
+            return new \WP_Error( 'image_gen_request_failed', $response->get_error_message() );
+        }
+
+        $response_body = wp_remote_retrieve_body( $response );
+        $data          = json_decode( $response_body, true );
+
+        if ( isset( $data['error'] ) ) {
+            return new \WP_Error( 'image_gen_api_error', $data['error']['message'], $data );
+        }
+
+        // The image data is usually returned as base64 encoded string in the response.
+        // This part might need adjustment based on the actual API response structure for image generation.
+        if ( ! isset( $data['candidates'][0]['content']['parts'][0]['inline_data']['data'] ) ) {
+            return new \WP_Error( 'image_gen_invalid_response', __( 'Invalid response from Image Generation API.', 'relovit' ), $data );
+        }
+
+        return $data['candidates'][0]['content']['parts'][0]['inline_data']['data']; // Returning base64 data.
+    }
 }

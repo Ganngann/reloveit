@@ -54,6 +54,10 @@ class Metabox {
                     <label for="relovit_images"><?php _e( 'Additional Images:', 'relovit' ); ?></label>
                     <input type="file" id="relovit-images" name="relovit_images[]" accept="image/*" multiple max="3">
                 </p>
+                <p>
+                    <input type="checkbox" id="relovit-generate-image" name="relovit_generate_image" value="1">
+                    <label for="relovit-generate-image"><?php _e( 'Generate a new main image with AI', 'relovit' ); ?></label>
+                </p>
                 <button type="button" id="relovit-enrich-button" class="button button-primary"><?php _e( 'Enrich with AI', 'relovit' ); ?></button>
             </form>
             <div id="relovit-enrichment-results" style="margin-top: 15px;"></div>
