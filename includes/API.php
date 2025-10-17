@@ -33,7 +33,7 @@ class API {
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [ $this, 'identify_objects' ],
-                'permission_callback' => 'is_user_logged_in',
+                'permission_callback' => [ $this, 'check_permissions' ],
             ]
         );
 
@@ -43,7 +43,7 @@ class API {
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [ $this, 'create_products' ],
-                'permission_callback' => 'is_user_logged_in',
+                'permission_callback' => [ $this, 'check_permissions' ],
             ]
         );
     }
@@ -118,5 +118,20 @@ class API {
         }
 
         return new \WP_Error( 'create_failed', 'Could not create any product drafts.', [ 'status' => 500 ] );
+    }
+
+    /**
+     * Check if the user has the required permissions.
+     *
+     * @return bool|\WP_Error
+     */
+    public function check_permissions() {
+        if ( ! current_user_can( 'upload_files' ) ) {
+            return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to upload files.', 'relovit' ), [ 'status' => 403 ] );
+        }
+        if ( ! current_user_can( 'edit_products' ) ) {
+            return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to create products.', 'relovit' ), [ 'status' => 403 ] );
+        }
+        return true;
     }
 }
