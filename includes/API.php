@@ -171,9 +171,12 @@ class API {
         $attachment_ids = [];
         $image_paths    = [];
 
-        // Manually handle each file from the array.
+        $attachment_ids = [];
+        $image_paths    = [];
+        $upload_overrides = [ 'test_form' => false ];
+
         foreach ( $files['relovit_images']['tmp_name'] as $key => $tmp_name ) {
-            $file = [
+            $uploaded_file = [
                 'name'     => $files['relovit_images']['name'][ $key ],
                 'type'     => $files['relovit_images']['type'][ $key ],
                 'tmp_name' => $tmp_name,
@@ -181,20 +184,27 @@ class API {
                 'size'     => $files['relovit_images']['size'][ $key ],
             ];
 
-            // We need to use a temporary variable to pass the file to media_handle_sideload.
-            $_FILES['relovit_temp_upload'] = $file;
-            $attachment_id = media_handle_sideload( 'relovit_temp_upload', $product_id );
-            unset( $_FILES['relovit_temp_upload'] );
+            $movefile = wp_handle_upload( $uploaded_file, $upload_overrides );
 
-            if ( is_wp_error( $attachment_id ) ) {
-                // Clean up already uploaded attachments if one fails.
-                foreach ( $attachment_ids as $id ) {
-                    wp_delete_attachment( $id, true );
-                }
-                return new \WP_Error( 'upload_error', $attachment_id->get_error_message(), [ 'status' => 500 ] );
+            if ( $movefile && ! isset( $movefile['error'] ) ) {
+                $attachment = [
+                    'guid'           => $movefile['url'],
+                    'post_mime_type' => $movefile['type'],
+                    'post_title'     => preg_replace( '/\.[^.]+$/', '', basename( $movefile['file'] ) ),
+                    'post_content'   => '',
+                    'post_status'    => 'inherit',
+                ];
+
+                $attachment_id = wp_insert_attachment( $attachment, $movefile['file'], $product_id );
+                require_once ABSPATH . 'wp-admin/includes/image.php';
+                $attachment_data = wp_generate_attachment_metadata( $attachment_id, $movefile['file'] );
+                wp_update_attachment_metadata( $attachment_id, $attachment_data );
+
+                $attachment_ids[] = $attachment_id;
+                $image_paths[]    = $movefile['file'];
+            } else {
+                return new \WP_Error( 'upload_error', $movefile['error'], [ 'status' => 500 ] );
             }
-            $attachment_ids[] = $attachment_id;
-            $image_paths[]    = get_attached_file( $attachment_id );
         }
 
         // Get the main product image as well.
