@@ -203,7 +203,11 @@ class API {
             array_unshift( $image_paths, get_attached_file( $main_image_id ) );
         }
 
-        $product      = wc_get_product( $product_id );
+        $product = wc_get_product( $product_id );
+        if ( ! $product ) {
+            return new \WP_Error( 'product_not_found', 'The specified product could not be found.', [ 'status' => 404 ] );
+        }
+
         $product_name = $product->get_name();
         $gemini_api   = new Gemini_API();
 
@@ -226,8 +230,8 @@ class API {
         $product->set_status( 'pending' );
         $result = $product->save();
 
-        if ( is_wp_error( $result ) ) {
-            return $result;
+        if ( is_wp_error( $result ) || $result === 0 ) {
+            return new \WP_Error( 'product_save_failed', __( 'Could not save the product after enrichment.', 'relovit' ), [ 'status' => 500 ] );
         }
 
         return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => __( 'Product enriched successfully!', 'relovit' ) ] ], 200 );
