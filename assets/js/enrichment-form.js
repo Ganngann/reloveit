@@ -5,10 +5,16 @@
         $('#relovit-enrich-button').on('click', function(e) {
             e.preventDefault();
 
-            var form = $('#relovit-enrichment-form');
-            var formData = new FormData(form[0]);
             var resultsDiv = $('#relovit-enrichment-results');
             var submitButton = $(this);
+
+            var formData = new FormData();
+            formData.append('product_id', $('#relovit-enrichment-form').find('input[name="product_id"]').val());
+
+            var files = $('#relovit-images')[0].files;
+            for (var i = 0; i < files.length; i++) {
+                formData.append('relovit_images[]', files[i]);
+            }
 
             // Basic validation
             if ( $('#relovit-images')[0].files.length === 0 ) {
