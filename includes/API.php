@@ -182,8 +182,9 @@ class API {
             ];
 
             // We need to use a temporary variable to pass the file to media_handle_sideload.
-            $_FILES['relovit_image_upload'] = $file;
-            $attachment_id = media_handle_sideload( $_FILES['relovit_image_upload'], $product_id );
+            $_FILES['relovit_temp_upload'] = $file;
+            $attachment_id = media_handle_sideload( 'relovit_temp_upload', $product_id );
+            unset( $_FILES['relovit_temp_upload'] );
 
             if ( is_wp_error( $attachment_id ) ) {
                 // Clean up already uploaded attachments if one fails.
@@ -223,7 +224,11 @@ class API {
         $product->set_regular_price( floatval( $price ) );
         $product->set_gallery_image_ids( $attachment_ids );
         $product->set_status( 'pending' );
-        $product->save();
+        $result = $product->save();
+
+        if ( is_wp_error( $result ) ) {
+            return $result;
+        }
 
         return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => __( 'Product enriched successfully!', 'relovit' ) ] ], 200 );
     }
