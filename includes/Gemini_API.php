@@ -24,7 +24,7 @@ class Gemini_API {
         if ( empty( $api_key ) ) {
             return new \WP_Error( 'api_key_missing', __( 'The Gemini API key is missing. Please add it in the Relovit settings.', 'relovit' ) );
         }
-        return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=' . $api_key;
+        return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $api_key;
     }
 
     /**
