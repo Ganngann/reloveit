@@ -2,15 +2,15 @@
 /**
  * Product Manager class.
  *
- * @package WPOccasionAI
+ * @package Relovit
  */
 
-namespace WPOccasionAI;
+namespace Relovit;
 
 /**
  * Class Product_Manager
  *
- * @package WPOccasionAI
+ * @package Relovit
  */
 class Product_Manager {
 
@@ -31,7 +31,7 @@ class Product_Manager {
             $product->set_image_id( $image_id );
 
             // Add a meta key to identify our products.
-            $product->add_meta_data( '_wp_occasion_ai_product', true );
+            $product->add_meta_data( '_relovit_product', true );
 
             $product_id = $product->save();
 

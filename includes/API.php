@@ -2,17 +2,17 @@
 /**
  * API Endpoints
  *
- * @package WPOccasionAI
+ * @package Relovit
  */
 
-namespace WPOccasionAI;
+namespace Relovit;
 
-use WPOccasionAI\Product_Manager;
+use Relovit\Product_Manager;
 
 /**
  * Class API
  *
- * @package WPOccasionAI
+ * @package Relovit
  */
 class API {
 
@@ -28,7 +28,7 @@ class API {
      */
     public function register_routes() {
         register_rest_route(
-            'wp-occasion-ai/v1',
+            'relovit/v1',
             '/identify-objects',
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
@@ -38,7 +38,7 @@ class API {
         );
 
         register_rest_route(
-            'wp-occasion-ai/v1',
+            'relovit/v1',
             '/create-products',
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
@@ -57,7 +57,7 @@ class API {
     public function identify_objects( $request ) {
         $files = $request->get_file_params();
 
-        if ( empty( $files['wp_occasion_ai_image'] ) ) {
+        if ( empty( $files['relovit_image'] ) ) {
             return new \WP_Error( 'no_image', 'No image was provided.', [ 'status' => 400 ] );
         }
 
@@ -66,7 +66,7 @@ class API {
         require_once ABSPATH . 'wp-admin/includes/file.php';
         require_once ABSPATH . 'wp-admin/includes/media.php';
 
-        $attachment_id = media_handle_upload( 'wp_occasion_ai_image', 0 );
+        $attachment_id = media_handle_upload( 'relovit_image', 0 );
 
         if ( is_wp_error( $attachment_id ) ) {
             return new \WP_Error( 'upload_error', $attachment_id->get_error_message(), [ 'status' => 500 ] );
@@ -84,7 +84,7 @@ class API {
         }
 
         // Store the attachment ID in a transient for the next step.
-        set_transient( 'wp_occasion_ai_image_id_' . get_current_user_id(), $attachment_id, HOUR_IN_SECONDS );
+        set_transient( 'relovit_image_id_' . get_current_user_id(), $attachment_id, HOUR_IN_SECONDS );
 
         return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'items' => $result ] ], 200 );
     }
@@ -101,7 +101,7 @@ class API {
             return new \WP_Error( 'no_items', 'No items were selected.', [ 'status' => 400 ] );
         }
 
-        $image_id = get_transient( 'wp_occasion_ai_image_id_' . get_current_user_id() );
+        $image_id = get_transient( 'relovit_image_id_' . get_current_user_id() );
         if ( ! $image_id ) {
             return new \WP_Error( 'no_image_id', 'Could not find the original image. Please try again.', [ 'status' => 400 ] );
         }
@@ -110,10 +110,10 @@ class API {
         $created_count   = $product_manager->create_draft_products( $items, $image_id );
 
         // Delete the transient.
-        delete_transient( 'wp_occasion_ai_image_id_' . get_current_user_id() );
+        delete_transient( 'relovit_image_id_' . get_current_user_id() );
 
         if ( $created_count > 0 ) {
-            $message = sprintf( _n( '%s product draft created.', '%s product drafts created.', $created_count, 'wp-occasion-ai' ), $created_count );
+            $message = sprintf( _n( '%s product draft created.', '%s product drafts created.', $created_count, 'relovit' ), $created_count );
             return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => $message ] ], 200 );
         }
 

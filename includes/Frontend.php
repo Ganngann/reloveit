@@ -2,15 +2,15 @@
 /**
  * Frontend handler class.
  *
- * @package WPOccasionAI
+ * @package Relovit
  */
 
-namespace WPOccasionAI;
+namespace Relovit;
 
 /**
  * Class Frontend
  *
- * @package WPOccasionAI
+ * @package Relovit
  */
 class Frontend {
 
@@ -26,7 +26,7 @@ class Frontend {
      * Register shortcodes.
      */
     public function register_shortcodes() {
-        add_shortcode( 'wp_occasion_ai_upload_form', [ $this, 'render_upload_form' ] );
+        add_shortcode( 'relovit_upload_form', [ $this, 'render_upload_form' ] );
     }
 
     /**
@@ -38,14 +38,14 @@ class Frontend {
     public function render_upload_form( $atts ) {
         ob_start();
         ?>
-        <div id="wp-occasion-ai-app">
+        <div id="relovit-app">
             <h2>Vendez vos objets en un clin d'œil</h2>
             <p>Téléversez une photo de vos objets et laissez notre IA faire le reste !</p>
-            <form id="wp-occasion-ai-upload-form" enctype="multipart/form-data">
-                <input type="file" id="wp-occasion-ai-image-upload" name="wp_occasion_ai_image" accept="image/*" required>
+            <form id="relovit-upload-form" enctype="multipart/form-data">
+                <input type="file" id="relovit-image-upload" name="relovit_image" accept="image/*" required>
                 <button type="submit">Identifier les objets</button>
             </form>
-            <div id="wp-occasion-ai-results"></div>
+            <div id="relovit-results"></div>
         </div>
         <?php
         return ob_get_clean();
@@ -56,13 +56,22 @@ class Frontend {
      */
     public function enqueue_scripts() {
         global $post;
-        if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'wp_occasion_ai_upload_form' ) ) {
+        if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'relovit_upload_form' ) ) {
             wp_enqueue_script(
-                'wp-occasion-ai-upload-form',
-                WP_OCCASION_AI_PLUGIN_URL . 'assets/js/upload-form.js',
+                'relovit-upload-form',
+                RELOVIT_PLUGIN_URL . 'assets/js/upload-form.js',
                 [ 'jquery' ],
-                WP_OCCASION_AI_VERSION,
+                RELOVIT_VERSION,
                 true
+            );
+
+            wp_localize_script(
+                'relovit-upload-form',
+                'relovit_ajax',
+                [
+                    'identify_url' => rest_url( 'relovit/v1/identify-objects' ),
+                    'create_url'   => rest_url( 'relovit/v1/create-products' ),
+                ]
             );
         }
     }

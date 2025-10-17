@@ -2,18 +2,15 @@
 /**
  * Main plugin class.
  *
- * @package WPOccasionAI
+ * @package Relovit
  */
 
-namespace WPOccasionAI;
-
-use WPOccasionAI\Frontend;
-use WPOccasionAI\API;
+namespace Relovit;
 
 /**
  * Class Plugin
  *
- * @package WPOccasionAI
+ * @package Relovit
  */
 class Plugin {
 
@@ -52,18 +49,22 @@ class Plugin {
      * Define constants.
      */
     private function define_constants() {
-        define( 'WP_OCCASION_AI_PLUGIN_DIR', plugin_dir_path( dirname( __FILE__ ) ) );
-        define( 'WP_OCCASION_AI_PLUGIN_URL', plugin_dir_url( dirname( __FILE__ ) ) );
+        define( 'RELOVIT_PLUGIN_DIR', plugin_dir_path( dirname( __FILE__ ) ) );
+        define( 'RELOVIT_PLUGIN_URL', plugin_dir_url( dirname( __FILE__ ) ) );
     }
 
     /**
      * Include required files.
      */
     private function includes() {
-        require_once WP_OCCASION_AI_PLUGIN_DIR . 'includes/Frontend.php';
-        require_once WP_OCCASION_AI_PLUGIN_DIR . 'includes/API.php';
-        require_once WP_OCCASION_AI_PLUGIN_DIR . 'includes/Gemini_API.php';
-        require_once WP_OCCASION_AI_PLUGIN_DIR . 'includes/Product_Manager.php';
+        require_once RELOVIT_PLUGIN_DIR . 'includes/Frontend.php';
+        require_once RELOVIT_PLUGIN_DIR . 'includes/API.php';
+        require_once RELOVIT_PLUGIN_DIR . 'includes/Gemini_API.php';
+        require_once RELOVIT_PLUGIN_DIR . 'includes/Product_Manager.php';
+
+        if ( is_admin() ) {
+            require_once RELOVIT_PLUGIN_DIR . 'includes/Admin.php';
+        }
     }
 
     /**
@@ -72,5 +73,9 @@ class Plugin {
     private function init_hooks() {
         new Frontend();
         new API();
+
+        if ( is_admin() ) {
+            new Admin();
+        }
     }
 }

@@ -2,21 +2,27 @@
 /**
  * Gemini API handler class.
  *
- * @package WPOccasionAI
+ * @package Relovit
  */
 
-namespace WPOccasionAI;
+namespace Relovit;
 
 /**
  * Class Gemini_API
  *
- * @package WPOccasionAI
+ * @package Relovit
  */
 class Gemini_API {
 
-    // TODO: Move this to a settings page in the WP admin.
-    private const GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY';
-    private const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=' . self::GEMINI_API_KEY;
+    /**
+     * Get the Gemini API URL.
+     *
+     * @return string
+     */
+    private function get_api_url() {
+        $api_key = get_option( 'relovit_gemini_api_key' );
+        return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=' . $api_key;
+    }
 
     /**
      * Identify objects in an image.
@@ -51,7 +57,7 @@ class Gemini_API {
         ];
 
         $response = wp_remote_post(
-            self::GEMINI_API_URL,
+            $this->get_api_url(),
             [
                 'body'    => json_encode( $body ),
                 'headers' => [

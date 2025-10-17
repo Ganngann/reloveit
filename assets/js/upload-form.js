@@ -2,33 +2,33 @@
     'use strict';
 
     $(function() {
-        $('#wp-occasion-ai-upload-form').on('submit', function(e) {
+        $('#relovit-upload-form').on('submit', function(e) {
             e.preventDefault();
 
             var formData = new FormData(this);
-            var resultsDiv = $('#wp-occasion-ai-results');
+            var resultsDiv = $('#relovit-results');
             var submitButton = $(this).find('button[type="submit"]');
 
             // Basic validation
-            if ( ! $('#wp-occasion-ai-image-upload').val() ) {
+            if ( ! $('#relovit-image-upload').val() ) {
                 resultsDiv.html('<p style="color: red;">Veuillez sélectionner une image.</p>');
                 return;
             }
 
             $.ajax({
-                url: '/wp-json/wp-occasion-ai/v1/identify-objects', // We will create this endpoint later
+                url: relovit_ajax.identify_url,
                 type: 'POST',
                 data: formData,
                 processData: false,
                 contentType: false,
                 beforeSend: function() {
-                    resultsDiv.html('<p>Analyse de l'image en cours...</p>');
+                    resultsDiv.html('<p>Analyse de l\'image en cours...</p>');
                     submitButton.prop('disabled', true);
                 },
                 success: function(response) {
                     if (response.success) {
                         var items = response.data.items;
-                        var html = '<h3>Objets identifiés :</h3><form id="wp-occasion-ai-select-form">';
+                        var html = '<h3>Objets identifiés :</h3><form id="relovit-select-form">';
                         items.forEach(function(item, index) {
                             html += '<div><input type="checkbox" id="item-' + index + '" name="items[]" value="' + item.trim() + '"> <label for="item-' + index + '">' + item.trim() + '</label></div>';
                         });
@@ -50,14 +50,14 @@
         });
 
         // Handle the second form submission (item selection)
-        $(document).on('submit', '#wp-occasion-ai-select-form', function(e) {
+        $(document).on('submit', '#relovit-select-form', function(e) {
             e.preventDefault();
 
             var formData = $(this).serialize();
-            var resultsDiv = $('#wp-occasion-ai-results');
+            var resultsDiv = $('#relovit-results');
 
             $.ajax({
-                url: '/wp-json/wp-occasion-ai/v1/create-products', // We will create this endpoint in the next step
+                url: relovit_ajax.create_url,
                 type: 'POST',
                 data: formData,
                 beforeSend: function() {

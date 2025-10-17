@@ -1,14 +1,14 @@
 <?php
 /**
- * Plugin Name:       WP Occasion AI
- * Plugin URI:        https://example.com/
+ * Plugin Name:       Relovit
+ * Plugin URI:        https://gann.be/
  * Description:       Utilise l'IA (Gemini) pour identifier des objets dans une image et créer des fiches produits dans WooCommerce.
  * Version:           1.0.0
- * Author:            Jules
- * Author URI:        https://example.com/
+ * Author:            Morgan Schaefer
+ * Author URI:        https://gann.be/
  * License:           GPL v2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       wp-occasion-ai
+ * Text Domain:       relovit
  * Domain Path:       /languages
  */
 
@@ -17,7 +17,7 @@ if ( ! defined( 'WPINC' ) ) {
     die;
 }
 
-define( 'WP_OCCASION_AI_VERSION', '1.0.0' );
+define( 'RELOVIT_VERSION', '1.0.0' );
 
 // Include the main plugin class.
 require_once plugin_dir_path( __FILE__ ) . 'includes/Plugin.php';
@@ -31,7 +31,7 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/Plugin.php';
  *
  * @since    1.0.0
  */
-function run_wp_occasion_ai() {
-    return \WPOccasionAI\Plugin::instance();
+function run_relovit() {
+    return \Relovit\Plugin::instance();
 }
-run_wp_occasion_ai();
+run_relovit();
