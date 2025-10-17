@@ -308,7 +308,9 @@ class API {
         }
 
         // Update the product.
-        $product->set_gallery_image_ids( $attachment_ids );
+        $existing_gallery_ids = $product->get_gallery_image_ids();
+        $new_gallery_ids      = array_unique( array_merge( $existing_gallery_ids, $attachment_ids ) );
+        $product->set_gallery_image_ids( $new_gallery_ids );
         $product->set_status( 'pending' );
         $result = $product->save();
 
