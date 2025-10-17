@@ -223,7 +223,7 @@ class Gemini_API {
             [
                 'body'    => json_encode( $body ),
                 'headers' => [ 'Content-Type' => 'application/json' ],
-                'timeout' => 120, // Image generation can be slow.
+                'timeout' => 180, // Image generation can be very slow.
             ]
         );
 

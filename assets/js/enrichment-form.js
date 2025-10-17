@@ -44,10 +44,14 @@
                         location.reload();
                     }, 2000);
                 },
-                error: function(jqXHR) {
+                error: function(jqXHR, textStatus, errorThrown) {
                     var message = 'Une erreur est survenue lors de la communication avec le serveur.';
                     if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
                         message = jqXHR.responseJSON.message;
+                    } else if (textStatus === 'timeout') {
+                        message = 'Le serveur a mis trop de temps à répondre. Veuillez réessayer.';
+                    } else if (errorThrown) {
+                        message = errorThrown;
                     }
                     resultsDiv.html('<p style="color: red;">' + message + '</p>');
                     submitButton.prop('disabled', false);
