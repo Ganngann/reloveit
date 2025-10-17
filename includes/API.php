@@ -116,14 +116,24 @@ class API {
             return new \WP_Error( 'no_image_id', 'Could not find the original image. Please try again.', [ 'status' => 400 ] );
         }
 
-        $product_manager = new Product_Manager();
-        $created_count   = $product_manager->create_draft_products( $items, $image_id );
+        $product_manager  = new Product_Manager();
+        $created_products = $product_manager->create_draft_products( $items, $image_id );
+
+        // If only one product was created, attach the image to it.
+        if ( count( $created_products ) === 1 ) {
+            wp_update_post(
+                [
+                    'ID'          => $image_id,
+                    'post_parent' => $created_products[0],
+                ]
+            );
+        }
 
         // Delete the transient.
         delete_transient( 'relovit_image_id_' . get_current_user_id() );
 
-        if ( $created_count > 0 ) {
-            $message = sprintf( _n( '%s product draft created.', '%s product drafts created.', $created_count, 'relovit' ), $created_count );
+        if ( count( $created_products ) > 0 ) {
+            $message = sprintf( _n( '%s product draft created.', '%s product drafts created.', count( $created_products ), 'relovit' ), count( $created_products ) );
             return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => $message ] ], 200 );
         }
 
@@ -231,6 +241,15 @@ class API {
         $price = $gemini_api->generate_price( $product_name, $image_paths );
         if ( is_wp_error( $price ) ) {
             return $price;
+        }
+
+        // Generate category.
+        $category_slug = $gemini_api->generate_category( $product_name, $image_paths );
+        if ( ! is_wp_error( $category_slug ) ) {
+            $term = get_term_by( 'slug', $category_slug, 'product_cat' );
+            if ( $term ) {
+                $product->set_category_ids( [ $term->term_id ] );
+            }
         }
 
         // Update the product.

@@ -173,4 +173,17 @@ class Gemini_API {
 
         return $data['candidates'][0]['content']['parts'][0]['text'];
     }
+
+    /**
+     * Generate a product category from images.
+     *
+     * @param string $product_name The name of the product.
+     * @param array  $image_paths  An array of paths to the image files.
+     * @return string|WP_Error
+     */
+    public function generate_category( $product_name, $image_paths ) {
+        $categories = get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => false, 'fields' => 'slugs' ] );
+        $prompt     = "En te basant sur le nom du produit '" . esc_html( $product_name ) . "' et les images fournies, choisis la catégorie la plus pertinente dans la liste suivante : " . implode( ', ', $categories ) . ". Réponds uniquement avec le slug de la catégorie (par exemple : 'livres').";
+        return $this->call_vision_api( $prompt, $image_paths );
+    }
 }

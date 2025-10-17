@@ -19,10 +19,10 @@ class Product_Manager {
      *
      * @param array $items Array of product names.
      * @param int   $image_id Attachment ID of the uploaded image.
-     * @return int Number of products created.
+     * @return array An array of created product IDs.
      */
     public function create_draft_products( $items, $image_id ) {
-        $products_created = 0;
+        $created_product_ids = [];
 
         foreach ( $items as $item_name ) {
             $product = new \WC_Product_Simple();
@@ -36,10 +36,10 @@ class Product_Manager {
             $product_id = $product->save();
 
             if ( $product_id ) {
-                $products_created++;
+                $created_product_ids[] = $product_id;
             }
         }
 
-        return $products_created;
+        return $created_product_ids;
     }
 }
