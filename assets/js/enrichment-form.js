@@ -2,12 +2,13 @@
     'use strict';
 
     $(function() {
-        $('#relovit-enrichment-form').on('submit', function(e) {
+        $('#relovit-enrich-button').on('click', function(e) {
             e.preventDefault();
 
-            var formData = new FormData(this);
+            var form = $('#relovit-enrichment-form')[0];
+            var formData = new FormData(form);
             var resultsDiv = $('#relovit-enrichment-results');
-            var submitButton = $(this).find('button[type="submit"]');
+            var submitButton = $(this);
 
             // Basic validation
             if ( $('#relovit-images')[0].files.length === 0 ) {
