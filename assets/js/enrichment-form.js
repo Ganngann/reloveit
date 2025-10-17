@@ -5,8 +5,8 @@
         $('#relovit-enrich-button').on('click', function(e) {
             e.preventDefault();
 
-            var form = $('#relovit-enrichment-form')[0];
-            var formData = new FormData(form);
+            var form = $('#relovit-enrichment-form');
+            var formData = new FormData(form[0]);
             var resultsDiv = $('#relovit-enrichment-results');
             var submitButton = $(this);
 
