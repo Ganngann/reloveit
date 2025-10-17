@@ -238,10 +238,16 @@ class Gemini_API {
             return new \WP_Error( 'image_gen_api_error', $data['error']['message'], $data );
         }
 
-        if ( ! isset( $data['candidates'][0]['content']['parts'][0]['inlineData']['data'] ) ) {
-            return new \WP_Error( 'image_gen_invalid_response', __( 'Invalid response from Image Generation API. No image data found.', 'relovit' ), $data );
+        if ( ! isset( $data['candidates'][0]['content']['parts'] ) ) {
+            return new \WP_Error( 'image_gen_invalid_response', __( 'Invalid response from Image Generation API. No parts found.', 'relovit' ), $data );
         }
 
-        return $data['candidates'][0]['content']['parts'][0]['inlineData']['data'];
+        foreach ( $data['candidates'][0]['content']['parts'] as $part ) {
+            if ( isset( $part['inlineData']['data'] ) ) {
+                return $part['inlineData']['data'];
+            }
+        }
+
+        return new \WP_Error( 'image_gen_no_image_data', __( 'No image data found in the API response.', 'relovit' ), $data );
     }
 }
