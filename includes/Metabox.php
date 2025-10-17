@@ -54,11 +54,26 @@ class Metabox {
                     <label for="relovit_images"><?php _e( 'Additional Images:', 'relovit' ); ?></label>
                     <input type="file" id="relovit-images" name="relovit_images[]" accept="image/*" multiple max="3">
                 </p>
-                <p>
-                    <input type="checkbox" id="relovit-generate-image" name="relovit_generate_image" value="1">
-                    <label for="relovit-generate-image"><?php _e( 'Generate a new main image with AI', 'relovit' ); ?></label>
-                </p>
-                <button type="button" id="relovit-enrich-button" class="button button-primary"><?php _e( 'Enrich with AI', 'relovit' ); ?></button>
+                <fieldset>
+                    <legend><?php _e( 'Select elements to update:', 'relovit' ); ?></legend>
+                    <p>
+                        <input type="checkbox" id="relovit-generate-description" name="relovit_tasks[]" value="description" checked>
+                        <label for="relovit-generate-description"><?php _e( 'Generate description', 'relovit' ); ?></label>
+                    </p>
+                    <p>
+                        <input type="checkbox" id="relovit-generate-price" name="relovit_tasks[]" value="price" checked>
+                        <label for="relovit-generate-price"><?php _e( 'Generate price', 'relovit' ); ?></label>
+                    </p>
+                    <p>
+                        <input type="checkbox" id="relovit-generate-category" name="relovit_tasks[]" value="category" checked>
+                        <label for="relovit-generate-category"><?php _e( 'Suggest category', 'relovit' ); ?></label>
+                    </p>
+                    <p>
+                        <input type="checkbox" id="relovit-generate-image" name="relovit_tasks[]" value="image">
+                        <label for="relovit-generate-image"><?php _e( 'Generate a new main image', 'relovit' ); ?></label>
+                    </p>
+                </fieldset>
+                <button type="button" id="relovit-enrich-button" class="button button-primary"><?php _e( 'Update Selected Elements', 'relovit' ); ?></button>
             </form>
             <div id="relovit-enrichment-results" style="margin-top: 15px;"></div>
         </div>

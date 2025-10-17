@@ -231,30 +231,35 @@ class API {
         $product_name = $product->get_name();
         $gemini_api   = new Gemini_API();
 
-        // Generate description.
-        $description = $gemini_api->generate_description( $product_name, $image_paths );
-        if ( is_wp_error( $description ) ) {
-            return $description;
+        $tasks = $request->get_param( 'relovit_tasks' ) ?: [];
+
+        if ( in_array( 'description', $tasks, true ) ) {
+            $description = $gemini_api->generate_description( $product_name, $image_paths );
+            if ( is_wp_error( $description ) ) {
+                return $description;
+            }
+            $product->set_description( $description );
         }
 
-        // Generate price.
-        $price = $gemini_api->generate_price( $product_name, $image_paths );
-        if ( is_wp_error( $price ) ) {
-            return $price;
+        if ( in_array( 'price', $tasks, true ) ) {
+            $price = $gemini_api->generate_price( $product_name, $image_paths );
+            if ( is_wp_error( $price ) ) {
+                return $price;
+            }
+            $product->set_regular_price( floatval( $price ) );
         }
 
-        // Generate category.
-        $category_slug = $gemini_api->generate_category( $product_name, $image_paths );
-        if ( ! is_wp_error( $category_slug ) ) {
-            $term = get_term_by( 'slug', $category_slug, 'product_cat' );
-            if ( $term ) {
-                $product->set_category_ids( [ $term->term_id ] );
+        if ( in_array( 'category', $tasks, true ) ) {
+            $category_slug = $gemini_api->generate_category( $product_name, $image_paths );
+            if ( ! is_wp_error( $category_slug ) ) {
+                $term = get_term_by( 'slug', $category_slug, 'product_cat' );
+                if ( $term ) {
+                    $product->set_category_ids( [ $term->term_id ] );
+                }
             }
         }
 
-        $generate_image = $request->get_param( 'relovit_generate_image' );
-
-        if ( $generate_image && ! empty( $image_paths ) ) {
+        if ( in_array( 'image', $tasks, true ) && ! empty( $image_paths ) ) {
             $generated_image_data = $gemini_api->generate_image( $image_paths[0] );
 
             if ( is_wp_error( $generated_image_data ) ) {
@@ -285,8 +290,6 @@ class API {
         }
 
         // Update the product.
-        $product->set_description( $description );
-        $product->set_regular_price( floatval( $price ) );
         $product->set_gallery_image_ids( $attachment_ids );
         $product->set_status( 'pending' );
         $result = $product->save();

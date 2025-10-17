@@ -16,6 +16,10 @@
                 formData.append('relovit_images[]', files[i]);
             }
 
+            $('input[name="relovit_tasks[]"]:checked').each(function() {
+                formData.append('relovit_tasks[]', $(this).val());
+            });
+
             // Basic validation
             if ( $('#relovit-images')[0].files.length === 0 ) {
                 resultsDiv.html('<p style="color: red;">Veuillez sélectionner au moins une image.</p>');
