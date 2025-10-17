@@ -95,4 +95,82 @@ class Gemini_API {
 
         return $items;
     }
+
+    /**
+     * Generate a product description from images.
+     *
+     * @param string $product_name The name of the product.
+     * @param array  $image_paths  An array of paths to the image files.
+     * @return string|WP_Error
+     */
+    public function generate_description( $product_name, $image_paths ) {
+        $prompt = "En tant qu'expert en vente d'occasion, rédigez une description détaillée, honnête et commerciale d'un " . esc_html( $product_name ) . " basé sur les images fournies, en insistant sur son état et sa valeur pour un acheteur d'occasion. Utilisez un ton engageant. Maximum 300 mots.";
+        return $this->call_vision_api( $prompt, $image_paths );
+    }
+
+    /**
+     * Generate a product price from images.
+     *
+     * @param string $product_name The name of the product.
+     * @param array  $image_paths  An array of paths to the image files.
+     * @return string|WP_Error
+     */
+    public function generate_price( $product_name, $image_paths ) {
+        $prompt = "En tenant compte du marché actuel des objets d'occasion et de l'état apparent de l'objet " . esc_html( $product_name ) . " dans ces images, proposez un prix de vente raisonnable en EUR. Répondez uniquement avec le prix au format numérique (exemple: 45.99).";
+        return $this->call_vision_api( $prompt, $image_paths );
+    }
+
+    /**
+     * Call the Gemini Vision API with a prompt and images.
+     *
+     * @param string $prompt      The text prompt.
+     * @param array  $image_paths An array of paths to the image files.
+     * @return string|WP_Error
+     */
+    private function call_vision_api( $prompt, $image_paths ) {
+        $api_url = $this->get_api_url();
+        if ( is_wp_error( $api_url ) ) {
+            return $api_url;
+        }
+
+        $parts = [ [ 'text' => $prompt ] ];
+        foreach ( $image_paths as $image_path ) {
+            if ( file_exists( $image_path ) ) {
+                $parts[] = [
+                    'inline_data' => [
+                        'mime_type' => mime_content_type( $image_path ),
+                        'data'      => base64_encode( file_get_contents( $image_path ) ),
+                    ],
+                ];
+            }
+        }
+
+        $body = [ 'contents' => [ [ 'parts' => $parts ] ] ];
+
+        $response = wp_remote_post(
+            $api_url,
+            [
+                'body'    => json_encode( $body ),
+                'headers' => [ 'Content-Type' => 'application/json' ],
+                'timeout' => 60,
+            ]
+        );
+
+        if ( is_wp_error( $response ) ) {
+            return new \WP_Error( 'api_request_failed', $response->get_error_message() );
+        }
+
+        $response_body = wp_remote_retrieve_body( $response );
+        $data          = json_decode( $response_body, true );
+
+        if ( isset( $data['error'] ) ) {
+            return new \WP_Error( 'gemini_api_error', $data['error']['message'], $data );
+        }
+
+        if ( ! isset( $data['candidates'][0]['content']['parts'][0]['text'] ) ) {
+            return new \WP_Error( 'api_invalid_response', __( 'Invalid response from Gemini API.', 'relovit' ), $data );
+        }
+
+        return $data['candidates'][0]['content']['parts'][0]['text'];
+    }
 }

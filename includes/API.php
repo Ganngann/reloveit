@@ -46,6 +46,16 @@ class API {
                 'permission_callback' => [ $this, 'check_permissions' ],
             ]
         );
+
+        register_rest_route(
+            'relovit/v1',
+            '/enrich-product',
+            [
+                'methods'             => \WP_REST_Server::CREATABLE,
+                'callback'            => [ $this, 'enrich_product' ],
+                'permission_callback' => [ $this, 'check_permissions' ],
+            ]
+        );
     }
 
     /**
@@ -133,5 +143,88 @@ class API {
             return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to create products.', 'relovit' ), [ 'status' => 403 ] );
         }
         return true;
+    }
+
+    /**
+     * Enrich a product with AI-generated content.
+     *
+     * @param \WP_REST_Request $request Full data about the request.
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function enrich_product( $request ) {
+        $product_id = $request->get_param( 'product_id' );
+        $files      = $request->get_file_params();
+
+        if ( empty( $product_id ) ) {
+            return new \WP_Error( 'no_product_id', 'No product ID was provided.', [ 'status' => 400 ] );
+        }
+
+        if ( empty( $files['relovit_images'] ) ) {
+            return new \WP_Error( 'no_images', 'No images were provided.', [ 'status' => 400 ] );
+        }
+
+        // Handle file uploads.
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+
+        $attachment_ids = [];
+        $image_paths    = [];
+
+        // Manually handle each file from the array.
+        foreach ( $files['relovit_images']['tmp_name'] as $key => $tmp_name ) {
+            $file = [
+                'name'     => $files['relovit_images']['name'][ $key ],
+                'type'     => $files['relovit_images']['type'][ $key ],
+                'tmp_name' => $tmp_name,
+                'error'    => $files['relovit_images']['error'][ $key ],
+                'size'     => $files['relovit_images']['size'][ $key ],
+            ];
+
+            // We need to use a temporary variable to pass the file to media_handle_sideload.
+            $_FILES['relovit_image_upload'] = $file;
+            $attachment_id = media_handle_sideload( $_FILES['relovit_image_upload'], $product_id );
+
+            if ( is_wp_error( $attachment_id ) ) {
+                // Clean up already uploaded attachments if one fails.
+                foreach ( $attachment_ids as $id ) {
+                    wp_delete_attachment( $id, true );
+                }
+                return new \WP_Error( 'upload_error', $attachment_id->get_error_message(), [ 'status' => 500 ] );
+            }
+            $attachment_ids[] = $attachment_id;
+            $image_paths[]    = get_attached_file( $attachment_id );
+        }
+
+        // Get the main product image as well.
+        $main_image_id = get_post_thumbnail_id( $product_id );
+        if ( $main_image_id ) {
+            array_unshift( $image_paths, get_attached_file( $main_image_id ) );
+        }
+
+        $product      = wc_get_product( $product_id );
+        $product_name = $product->get_name();
+        $gemini_api   = new Gemini_API();
+
+        // Generate description.
+        $description = $gemini_api->generate_description( $product_name, $image_paths );
+        if ( is_wp_error( $description ) ) {
+            return $description;
+        }
+
+        // Generate price.
+        $price = $gemini_api->generate_price( $product_name, $image_paths );
+        if ( is_wp_error( $price ) ) {
+            return $price;
+        }
+
+        // Update the product.
+        $product->set_description( $description );
+        $product->set_regular_price( floatval( $price ) );
+        $product->set_gallery_image_ids( $attachment_ids );
+        $product->set_status( 'pending' );
+        $product->save();
+
+        return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => __( 'Product enriched successfully!', 'relovit' ) ] ], 200 );
     }
 }
