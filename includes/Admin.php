@@ -20,6 +20,19 @@ class Admin {
     public function __construct() {
         add_action( 'admin_menu', [ $this, 'add_admin_menu' ] );
         add_action( 'admin_init', [ $this, 'settings_init' ] );
+        add_filter( 'plugin_action_links_' . plugin_basename( RELOVIT_PLUGIN_FILE ), [ $this, 'add_settings_link' ] );
+    }
+
+    /**
+     * Add a settings link to the plugin page.
+     *
+     * @param array $links The existing links.
+     * @return array The modified links.
+     */
+    public function add_settings_link( $links ) {
+        $settings_link = '<a href="' . admin_url( 'options-general.php?page=relovit' ) . '">' . __( 'Settings', 'relovit' ) . '</a>';
+        array_unshift( $links, $settings_link );
+        return $links;
     }
 
     /**

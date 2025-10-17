@@ -18,6 +18,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 define( 'RELOVIT_VERSION', '1.0.0' );
+define( 'RELOVIT_PLUGIN_FILE', __FILE__ );
 
 // Include the main plugin class.
 require_once plugin_dir_path( __FILE__ ) . 'includes/Plugin.php';
