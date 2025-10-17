@@ -17,10 +17,13 @@ class Gemini_API {
     /**
      * Get the Gemini API URL.
      *
-     * @return string
+     * @return string|\WP_Error
      */
     private function get_api_url() {
         $api_key = get_option( 'relovit_gemini_api_key' );
+        if ( empty( $api_key ) ) {
+            return new \WP_Error( 'api_key_missing', __( 'The Gemini API key is missing. Please add it in the Relovit settings.', 'relovit' ) );
+        }
         return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=' . $api_key;
     }
 
@@ -56,8 +59,13 @@ class Gemini_API {
             ],
         ];
 
+        $api_url = $this->get_api_url();
+        if ( is_wp_error( $api_url ) ) {
+            return $api_url;
+        }
+
         $response = wp_remote_post(
-            $this->get_api_url(),
+            $api_url,
             [
                 'body'    => json_encode( $body ),
                 'headers' => [
@@ -68,14 +76,18 @@ class Gemini_API {
         );
 
         if ( is_wp_error( $response ) ) {
-            return $response;
+            return new \WP_Error( 'api_request_failed', $response->get_error_message() );
         }
 
         $response_body = wp_remote_retrieve_body( $response );
         $data          = json_decode( $response_body, true );
 
+        if ( isset( $data['error'] ) ) {
+            return new \WP_Error( 'gemini_api_error', $data['error']['message'], $data );
+        }
+
         if ( ! isset( $data['candidates'][0]['content']['parts'][0]['text'] ) ) {
-            return new \WP_Error( 'api_error', 'Invalid response from Gemini API.', $data );
+            return new \WP_Error( 'api_invalid_response', __( 'Invalid response from Gemini API. The API key might be invalid or the API might be unavailable.', 'relovit' ), $data );
         }
 
         $text = $data['candidates'][0]['content']['parts'][0]['text'];
