@@ -21,10 +21,6 @@
             });
 
             // Basic validation
-            if ( $('#relovit-images')[0].files.length === 0 ) {
-                resultsDiv.html('<p style="color: red;">Veuillez sélectionner au moins une image.</p>');
-                return;
-            }
              if ( $('#relovit-images')[0].files.length > 3 ) {
                 resultsDiv.html('<p style="color: red;">Vous ne pouvez pas téléverser plus de 3 images.</p>');
                 return;

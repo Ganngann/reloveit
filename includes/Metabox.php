@@ -57,15 +57,15 @@ class Metabox {
                 <fieldset>
                     <legend><?php _e( 'Select elements to update:', 'relovit' ); ?></legend>
                     <p>
-                        <input type="checkbox" id="relovit-generate-description" name="relovit_tasks[]" value="description" checked>
+                        <input type="checkbox" id="relovit-generate-description" name="relovit_tasks[]" value="description">
                         <label for="relovit-generate-description"><?php _e( 'Generate description', 'relovit' ); ?></label>
                     </p>
                     <p>
-                        <input type="checkbox" id="relovit-generate-price" name="relovit_tasks[]" value="price" checked>
+                        <input type="checkbox" id="relovit-generate-price" name="relovit_tasks[]" value="price">
                         <label for="relovit-generate-price"><?php _e( 'Generate price', 'relovit' ); ?></label>
                     </p>
                     <p>
-                        <input type="checkbox" id="relovit-generate-category" name="relovit_tasks[]" value="category" checked>
+                        <input type="checkbox" id="relovit-generate-category" name="relovit_tasks[]" value="category">
                         <label for="relovit-generate-category"><?php _e( 'Suggest category', 'relovit' ); ?></label>
                     </p>
                     <p>

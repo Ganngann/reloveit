@@ -169,8 +169,9 @@ class API {
             return new \WP_Error( 'no_product_id', 'No product ID was provided.', [ 'status' => 400 ] );
         }
 
-        if ( empty( $files['relovit_images'] ) ) {
-            return new \WP_Error( 'no_images', 'No images were provided.', [ 'status' => 400 ] );
+        $tasks = $request->get_param( 'relovit_tasks' ) ?: [];
+        if ( empty( $tasks ) ) {
+            return new \WP_Error( 'no_tasks', 'Please select at least one task to perform.', [ 'status' => 400 ] );
         }
 
         // Handle file uploads.
@@ -183,47 +184,64 @@ class API {
 
         $attachment_ids = [];
         $image_paths    = [];
-        $upload_overrides = [ 'test_form' => false ];
 
-        foreach ( $files['relovit_images']['tmp_name'] as $key => $tmp_name ) {
-            $uploaded_file = [
-                'name'     => $files['relovit_images']['name'][ $key ],
-                'type'     => $files['relovit_images']['type'][ $key ],
-                'tmp_name' => $tmp_name,
-                'error'    => $files['relovit_images']['error'][ $key ],
-                'size'     => $files['relovit_images']['size'][ $key ],
-            ];
+        if ( ! empty( $files['relovit_images'] ) ) {
+            $upload_overrides = [ 'test_form' => false ];
 
-            $movefile = wp_handle_upload( $uploaded_file, $upload_overrides );
-
-            if ( $movefile && ! isset( $movefile['error'] ) ) {
-                $attachment = [
-                    'guid'           => $movefile['url'],
-                    'post_mime_type' => $movefile['type'],
-                    'post_title'     => preg_replace( '/\.[^.]+$/', '', basename( $movefile['file'] ) ),
-                    'post_content'   => '',
-                    'post_status'    => 'inherit',
+            foreach ( $files['relovit_images']['tmp_name'] as $key => $tmp_name ) {
+                if ( empty( $tmp_name ) ) {
+                    continue;
+                }
+                $uploaded_file = [
+                    'name'     => $files['relovit_images']['name'][ $key ],
+                    'type'     => $files['relovit_images']['type'][ $key ],
+                    'tmp_name' => $tmp_name,
+                    'error'    => $files['relovit_images']['error'][ $key ],
+                    'size'     => $files['relovit_images']['size'][ $key ],
                 ];
 
-                $attachment_id = wp_insert_attachment( $attachment, $movefile['file'], $product_id );
-                require_once ABSPATH . 'wp-admin/includes/image.php';
-                $attachment_data = wp_generate_attachment_metadata( $attachment_id, $movefile['file'] );
-                wp_update_attachment_metadata( $attachment_id, $attachment_data );
+                $movefile = wp_handle_upload( $uploaded_file, $upload_overrides );
 
-                $attachment_ids[] = $attachment_id;
-                $image_paths[]    = $movefile['file'];
-            } else {
-                return new \WP_Error( 'upload_error', $movefile['error'], [ 'status' => 500 ] );
+                if ( $movefile && ! isset( $movefile['error'] ) ) {
+                    $attachment = [
+                        'guid'           => $movefile['url'],
+                        'post_mime_type' => $movefile['type'],
+                        'post_title'     => preg_replace( '/\.[^.]+$/', '', basename( $movefile['file'] ) ),
+                        'post_content'   => '',
+                        'post_status'    => 'inherit',
+                    ];
+
+                    $attachment_id = wp_insert_attachment( $attachment, $movefile['file'], $product_id );
+                    require_once ABSPATH . 'wp-admin/includes/image.php';
+                    $attachment_data = wp_generate_attachment_metadata( $attachment_id, $movefile['file'] );
+                    wp_update_attachment_metadata( $attachment_id, $attachment_data );
+
+                    $attachment_ids[] = $attachment_id;
+                    $image_paths[]    = $movefile['file'];
+                } else {
+                    return new \WP_Error( 'upload_error', $movefile['error'], [ 'status' => 500 ] );
+                }
             }
         }
 
         // Get the main product image as well.
         $main_image_id = get_post_thumbnail_id( $product_id );
         if ( $main_image_id ) {
-            array_unshift( $image_paths, get_attached_file( $main_image_id ) );
+            $image_paths[] = get_attached_file( $main_image_id );
         }
 
+        // Get gallery images.
         $product = wc_get_product( $product_id );
+        $gallery_image_ids = $product->get_gallery_image_ids();
+        foreach ( $gallery_image_ids as $gallery_image_id ) {
+            $image_paths[] = get_attached_file( $gallery_image_id );
+        }
+        $image_paths = array_unique( $image_paths );
+
+        if ( empty( $image_paths ) ) {
+            return new \WP_Error( 'no_images_found', 'No images found for this product. Please upload at least one.', [ 'status' => 400 ] );
+        }
+
         if ( ! $product ) {
             return new \WP_Error( 'product_not_found', 'The specified product could not be found.', [ 'status' => 404 ] );
         }
