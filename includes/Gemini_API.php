@@ -204,12 +204,14 @@ class Gemini_API {
 
         $body = [
             'contents' => [
-                'parts' => [
-                    [ 'text' => $prompt ],
-                    [
-                        'inline_data' => [
-                            'mime_type' => mime_content_type( $image_path ),
-                            'data'      => base64_encode( file_get_contents( $image_path ) ),
+                [
+                    'parts' => [
+                        [ 'text' => $prompt ],
+                        [
+                            'inline_data' => [
+                                'mime_type' => mime_content_type( $image_path ),
+                                'data'      => base64_encode( file_get_contents( $image_path ) ),
+                            ],
                         ],
                     ],
                 ],
@@ -236,12 +238,10 @@ class Gemini_API {
             return new \WP_Error( 'image_gen_api_error', $data['error']['message'], $data );
         }
 
-        // The image data is usually returned as base64 encoded string in the response.
-        // This part might need adjustment based on the actual API response structure for image generation.
-        if ( ! isset( $data['candidates'][0]['content']['parts'][0]['inline_data']['data'] ) ) {
-            return new \WP_Error( 'image_gen_invalid_response', __( 'Invalid response from Image Generation API.', 'relovit' ), $data );
+        if ( ! isset( $data['candidates'][0]['content']['parts'][0]['inlineData']['data'] ) ) {
+            return new \WP_Error( 'image_gen_invalid_response', __( 'Invalid response from Image Generation API. No image data found.', 'relovit' ), $data );
         }
 
-        return $data['candidates'][0]['content']['parts'][0]['inline_data']['data']; // Returning base64 data.
+        return $data['candidates'][0]['content']['parts'][0]['inlineData']['data'];
     }
 }
