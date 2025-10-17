@@ -9,7 +9,7 @@
             var submitButton = $(this);
 
             var formData = new FormData();
-            formData.append('product_id', $('#relovit-enrichment-form').find('input[name="product_id"]').val());
+            formData.append('product_id', $('#relovit-product-id').val());
 
             var files = $('#relovit-images')[0].files;
             for (var i = 0; i < files.length; i++) {

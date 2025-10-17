@@ -49,7 +49,7 @@ class Metabox {
         <div id="relovit-enrichment-app">
             <p><?php _e( 'Upload up to 3 additional images of the product to generate a description and price with AI.', 'relovit' ); ?></p>
             <form id="relovit-enrichment-form">
-                <input type="hidden" name="product_id" value="<?php echo esc_attr( $post->ID ); ?>">
+                <input type="hidden" id="relovit-product-id" name="product_id" value="<?php echo esc_attr( $post->ID ); ?>">
                 <p>
                     <label for="relovit_images"><?php _e( 'Additional Images:', 'relovit' ); ?></label>
                     <input type="file" id="relovit-images" name="relovit_images[]" accept="image/*" multiple max="3">
