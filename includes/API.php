@@ -251,6 +251,14 @@ class API {
 
         $tasks = $request->get_param( 'relovit_tasks' ) ?: [];
 
+        if ( in_array( 'title', $tasks, true ) ) {
+            $new_title = $gemini_api->generate_title( $product_name, $image_paths );
+            if ( is_wp_error( $new_title ) ) {
+                return $new_title;
+            }
+            $product->set_name( $new_title );
+        }
+
         if ( in_array( 'description', $tasks, true ) ) {
             $description = $gemini_api->generate_description( $product_name, $image_paths );
             if ( is_wp_error( $description ) ) {
@@ -318,6 +326,24 @@ class API {
             return new \WP_Error( 'product_save_failed', __( 'Could not save the product after enrichment.', 'relovit' ), [ 'status' => 500 ] );
         }
 
-        return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => __( 'Product enriched successfully!', 'relovit' ) ] ], 200 );
+        $product_data = [
+            'title'       => $product->get_name(),
+            'description' => $product->get_description(),
+            'price'       => $product->get_regular_price(),
+            'category_id' => $product->get_category_ids()[0] ?? null,
+            'image_id'    => $product->get_image_id(),
+            'gallery_ids' => $product->get_gallery_image_ids(),
+        ];
+
+        return new \WP_REST_Response(
+            [
+                'success' => true,
+                'data'    => [
+                    'message' => __( 'Product enriched successfully!', 'relovit' ),
+                    'product' => $product_data,
+                ],
+            ],
+            200
+        );
     }
 }

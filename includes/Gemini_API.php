@@ -109,6 +109,18 @@ class Gemini_API {
     }
 
     /**
+     * Generate a product title from images.
+     *
+     * @param string $product_name The name of the product.
+     * @param array  $image_paths  An array of paths to the image files.
+     * @return string|WP_Error
+     */
+    public function generate_title( $product_name, $image_paths ) {
+        $prompt = "En tant qu'expert en e-commerce, améliorez le titre suivant pour le rendre plus percutant et informatif, en vous basant sur les images fournies : '" . esc_html( $product_name ) . "'. Le nouveau titre doit être concis (maximum 60 caractères), inclure des mots-clés pertinents et donner envie de cliquer. Répondez uniquement avec le nouveau titre.";
+        return $this->call_vision_api( $prompt, $image_paths );
+    }
+
+    /**
      * Generate a product price from images.
      *
      * @param string $product_name The name of the product.

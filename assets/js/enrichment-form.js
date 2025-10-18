@@ -39,10 +39,48 @@
                 },
                 success: function(response) {
                     resultsDiv.html('<p style="color: green;">' + response.data.message + '</p>');
-                    // Optionally, reload the page to see the changes
-                    setTimeout(function() {
-                        location.reload();
-                    }, 2000);
+                    submitButton.prop('disabled', false);
+
+                    var product = response.data.product;
+
+                    // Update fields based on which tasks were performed.
+                    var tasks = [];
+                    $('input[name="relovit_tasks[]"]:checked').each(function() {
+                        tasks.push($(this).val());
+                    });
+
+                    if (tasks.includes('title') && product.title) {
+                        $('#title').val(product.title).trigger('change');
+                        // Also update the "slug" which is generated from the title
+                        if (typeof slugL10n !== 'undefined') {
+                             $('#post_name').val(product.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''));
+                        }
+                    }
+
+                    if (tasks.includes('description') && product.description) {
+                         if (typeof tinyMCE !== 'undefined' && tinyMCE.get('content')) {
+                            tinyMCE.get('content').setContent(product.description);
+                        } else {
+                            $('#content').val(product.description);
+                        }
+                    }
+
+                    if (tasks.includes('price') && product.price) {
+                        $('#_regular_price').val(product.price).trigger('change');
+                    }
+
+                    if (tasks.includes('category') && product.category_id) {
+                         $('#product_cat-' + product.category_id).prop('checked', true);
+                         // This is a bit of a hack as Select2/Chosen might be used by other plugins
+                         $('select#product_cat').val(product.category_id).trigger('change');
+                    }
+
+                    if (tasks.includes('image')) {
+                        // Reloading is the safest way to show image changes (main image, gallery)
+                         setTimeout(function() {
+                            location.reload();
+                        }, 1000);
+                    }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
                     var message = 'Une erreur est survenue lors de la communication avec le serveur.';
