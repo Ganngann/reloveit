@@ -2,34 +2,53 @@
     'use strict';
 
     $(function() {
-        // Variable to store the resized image blob
         var resizedImageBlob = null;
         var originalFileName = '';
+        var imageInput = $('#relovit-image-upload');
+        var resultsDiv = $('#relovit-results');
+        var previewContainer = $('#relovit-image-preview-container');
+        var previewImg = $('#relovit-image-preview');
+        var uploadOptions = $('.relovit-upload-options');
 
-        // Handle file selection and resizing
-        $('#relovit-image-upload').on('change', function(e) {
+        // --- Button Click Handlers ---
+
+        $('#relovit-capture-btn').on('click', function() {
+            imageInput.attr('capture', 'environment');
+            imageInput.click();
+        });
+
+        $('#relovit-library-btn').on('click', function() {
+            imageInput.removeAttr('capture');
+            imageInput.click();
+        });
+
+        // --- Image Selection and Processing ---
+
+        imageInput.on('change', function(e) {
             var file = e.target.files[0];
-            var resultsDiv = $('#relovit-results');
 
-            resizedImageBlob = null; // Reset on new file selection
+            resizedImageBlob = null;
+            previewContainer.hide();
+            resultsDiv.empty();
 
             if (!file) {
                 return;
             }
 
-            // Check if it's an image
             if (!file.type.startsWith('image/')) {
                 resultsDiv.html('<p style="color: red;">Veuillez sélectionner un fichier image valide.</p>');
-                $(this).val(''); // Reset the input
+                $(this).val('');
                 return;
             }
 
             originalFileName = file.name;
             resultsDiv.html('<p>Préparation de l\'image...</p>');
 
-
             var reader = new FileReader();
             reader.onload = function(event) {
+                // Show preview
+                previewImg.attr('src', event.target.result);
+
                 var img = new Image();
                 img.onload = function() {
                     var MAX_WIDTH = 1920;
@@ -37,7 +56,6 @@
                     var width = img.width;
                     var height = img.height;
 
-                    // Only resize if the image is larger than the max dimensions
                     if (width > MAX_WIDTH || height > MAX_HEIGHT) {
                         if (width > height) {
                             if (width > MAX_WIDTH) {
@@ -58,37 +76,31 @@
                     var ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
 
-                    // Convert canvas to blob
                     canvas.toBlob(function(blob) {
                         resizedImageBlob = blob;
-                        resultsDiv.html('<p style="color: green;">Image prête à être envoyée.</p>');
-                    }, 'image/jpeg', 0.85); // Use JPEG with 85% quality
+                        resultsDiv.html('<p style="color: green;">Image prête. Cliquez sur "Identifier" pour continuer.</p>');
+                        previewContainer.show();
+                        uploadOptions.hide();
+                    }, 'image/jpeg', 0.85);
                 };
                 img.src = event.target.result;
             };
             reader.readAsDataURL(file);
         });
 
+        // --- Form Submission ---
 
         $('#relovit-upload-form').on('submit', function(e) {
             e.preventDefault();
 
-            var resultsDiv = $('#relovit-results');
-            var submitButton = $(this).find('button[type="submit"]');
+            var submitButton = $('#relovit-submit-btn');
 
-            // Check if an image has been selected and processed
             if (!resizedImageBlob) {
-                // Check if a file is selected but not yet processed
-                if ($('#relovit-image-upload').val()) {
-                     resultsDiv.html('<p style="color: red;">Veuillez attendre la fin de la préparation de l\'image.</p>');
-                } else {
-                     resultsDiv.html('<p style="color: red;">Veuillez sélectionner une image.</p>');
-                }
+                resultsDiv.html('<p style="color: red;">Aucune image n\'a été traitée. Veuillez en sélectionner une.</p>');
                 return;
             }
 
             var formData = new FormData();
-            // Use the original file name for better context on the server
             formData.append('relovit_image', resizedImageBlob, originalFileName);
 
             $.ajax({
@@ -101,12 +113,12 @@
                     xhr.setRequestHeader('X-WP-Nonce', relovit_ajax.nonce);
                     resultsDiv.html('<p>Analyse de l\'image en cours...</p>');
                     submitButton.prop('disabled', true);
+                    previewContainer.css('opacity', 0.7);
                 },
                 success: function(response) {
                     var items = response.data.items;
                     var html = '<h3>Objets identifiés :</h3><form id="relovit-select-form">';
                     items.forEach(function(item, index) {
-                        // Use .text() to prevent XSS and handle quotes correctly, then grab the text for the value
                         var tempLabel = $('<label>').text(item.trim());
                         var safeValue = tempLabel.text();
                         html += '<div><input type="checkbox" id="item-' + index + '" name="items[]" value="' + safeValue.replace(/"/g, '&quot;') + '"> <label for="item-' + index + '">' + tempLabel.html() + '</label></div>';
@@ -115,6 +127,7 @@
                     html += '<input type="hidden" name="attachment_id" value="' + response.data.attachment_id + '">';
                     html += '<button type="submit">Créer les brouillons</button></form>';
                     resultsDiv.html(html);
+                    previewContainer.hide();
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
                     var message = 'Une erreur est survenue lors de la communication avec le serveur.';
@@ -125,11 +138,13 @@
                 },
                 complete: function() {
                     submitButton.prop('disabled', false);
+                    previewContainer.css('opacity', 1);
                 }
             });
         });
 
-        // Handle the second form submission (item selection)
+        // --- Item Selection Form Submission ---
+
         $(document).on('submit', '#relovit-select-form', function(e) {
             e.preventDefault();
 
@@ -146,6 +161,9 @@
                 },
                 success: function(response) {
                     resultsDiv.html('<p style="color: green;">' + response.data.message + '</p>');
+                    // Reset the initial UI state
+                    uploadOptions.show();
+                    imageInput.val(''); // Clear the file input
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
                     var message = 'Une erreur est survenue lors de la communication avec le serveur.';
