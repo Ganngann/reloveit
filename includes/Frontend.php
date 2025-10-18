@@ -33,7 +33,7 @@ class Frontend {
         add_action( 'init', [ $this, 'relovit_add_my_account_endpoint' ] );
         add_filter( 'query_vars', [ $this, 'relovit_add_query_vars' ], 0 );
         add_action( 'woocommerce_account_relovit-settings_endpoint', [ $this, 'relovit_settings_content' ] );
-        add_action( 'init', [ $this, 'relovit_save_settings' ] );
+        add_action( 'template_redirect', [ $this, 'relovit_save_settings' ] );
         add_action( 'init', [ $this, 'flush_rewrite_rules_on_load' ] );
     }
 
