@@ -35,7 +35,6 @@ class Frontend {
         add_action( 'woocommerce_account_relovit-settings_endpoint', [ $this, 'relovit_settings_content' ] );
         add_action( 'woocommerce_account_relovit-products_endpoint', [ $this, 'relovit_products_content' ] );
         add_action( 'template_redirect', [ $this, 'relovit_save_settings' ] );
-        add_action( 'init', [ $this, 'flush_rewrite_rules_on_load' ] );
     }
 
     /**
@@ -91,18 +90,6 @@ class Frontend {
         $vars[] = 'relovit-settings';
         $vars[] = 'relovit-products';
         return $vars;
-    }
-
-    /**
-     * Flush rewrite rules on plugin update to prevent 404 errors.
-     * This is tied to the plugin version to ensure it runs on updates.
-     */
-    public function flush_rewrite_rules_on_load() {
-        $current_version = get_option( 'relovit_version', '0' );
-        if ( version_compare( $current_version, RELOVIT_VERSION, '<' ) ) {
-            flush_rewrite_rules();
-            update_option( 'relovit_version', RELOVIT_VERSION );
-        }
     }
 
     /**
