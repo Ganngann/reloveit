@@ -57,6 +57,7 @@ class Plugin {
      * Include required files.
      */
     private function includes() {
+        require_once RELOVIT_PLUGIN_DIR . 'includes/Settings.php';
         require_once RELOVIT_PLUGIN_DIR . 'includes/Frontend.php';
         require_once RELOVIT_PLUGIN_DIR . 'includes/API.php';
         require_once RELOVIT_PLUGIN_DIR . 'includes/Gemini_API.php';
