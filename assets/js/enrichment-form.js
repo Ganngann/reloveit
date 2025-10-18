@@ -69,10 +69,11 @@
                         $('#_regular_price').val(product.price).trigger('change');
                     }
 
-                    if (tasks.includes('category') && product.category_id) {
-                         $('#product_cat-' + product.category_id).prop('checked', true);
-                         // This is a bit of a hack as Select2/Chosen might be used by other plugins
-                         $('select#product_cat').val(product.category_id).trigger('change');
+                    if (tasks.includes('category')) {
+                        // For categories and tags, we just reload, as updating the UI is complex
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1000);
                     }
 
                     if (tasks.includes('image')) {

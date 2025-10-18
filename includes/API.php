@@ -251,14 +251,6 @@ class API {
 
         $tasks = $request->get_param( 'relovit_tasks' ) ?: [];
 
-        if ( in_array( 'title', $tasks, true ) ) {
-            $new_title = $gemini_api->generate_title( $product_name, $image_paths );
-            if ( is_wp_error( $new_title ) ) {
-                return $new_title;
-            }
-            $product->set_name( $new_title );
-        }
-
         if ( in_array( 'description', $tasks, true ) ) {
             $description = $gemini_api->generate_description( $product_name, $image_paths );
             if ( is_wp_error( $description ) ) {
@@ -276,11 +268,19 @@ class API {
         }
 
         if ( in_array( 'category', $tasks, true ) ) {
-            $category_slug = $gemini_api->generate_category( $product_name, $image_paths );
-            if ( ! is_wp_error( $category_slug ) ) {
-                $term = get_term_by( 'slug', $category_slug, 'product_cat' );
-                if ( $term ) {
-                    $product->set_category_ids( [ $term->term_id ] );
+            $taxonomy_terms = $gemini_api->generate_taxonomy_terms( $product_name, $image_paths );
+            if ( ! is_wp_error( $taxonomy_terms ) && ! empty( $taxonomy_terms ) ) {
+                // Handle hierarchical categories.
+                if ( ! empty( $taxonomy_terms['category'] ) ) {
+                    $category_id = $this->find_or_create_term_path( $taxonomy_terms['category'], 'product_cat' );
+                    if ( $category_id ) {
+                        $product->set_category_ids( [ $category_id ] );
+                    }
+                }
+
+                // Handle tags.
+                if ( ! empty( $taxonomy_terms['tags'] ) ) {
+                    wp_set_post_terms( $product_id, $taxonomy_terms['tags'], 'product_tag', false );
                 }
             }
         }
@@ -326,6 +326,9 @@ class API {
             return new \WP_Error( 'product_save_failed', __( 'Could not save the product after enrichment.', 'relovit' ), [ 'status' => 500 ] );
         }
 
+        // Get the names of the tags to return them in the response.
+        $tag_terms = wp_get_post_terms( $product->get_id(), 'product_tag', [ 'fields' => 'names' ] );
+
         $product_data = [
             'title'       => $product->get_name(),
             'description' => $product->get_description(),
@@ -333,6 +336,7 @@ class API {
             'category_id' => $product->get_category_ids()[0] ?? null,
             'image_id'    => $product->get_image_id(),
             'gallery_ids' => $product->get_gallery_image_ids(),
+            'tags'        => $tag_terms,
         ];
 
         return new \WP_REST_Response(
@@ -345,5 +349,43 @@ class API {
             ],
             200
         );
+    }
+
+    /**
+     * Finds or creates a term and its parents, returning the final term's ID.
+     *
+     * @param array  $term_path An array of term names, from parent to child.
+     * @param string $taxonomy  The taxonomy to use.
+     * @return int|null The ID of the final term, or null on failure.
+     */
+    private function find_or_create_term_path( $term_path, $taxonomy ) {
+        $parent_id = 0;
+        $final_term_id = null;
+
+        foreach ( $term_path as $term_name ) {
+            $term_name = trim( $term_name );
+            if ( empty( $term_name ) ) {
+                continue;
+            }
+
+            // Look for the term with the correct parent.
+            $term = get_term_by( 'name', $term_name, $taxonomy, OBJECT, 'raw', [ 'parent' => $parent_id ] );
+
+            if ( ! $term ) {
+                // If it doesn't exist, create it.
+                $new_term = wp_insert_term( $term_name, $taxonomy, [ 'parent' => $parent_id ] );
+                if ( is_wp_error( $new_term ) ) {
+                    // Log error or handle it. For now, we stop.
+                    return null;
+                }
+                $final_term_id = $new_term['term_id'];
+            } else {
+                $final_term_id = $term->term_id;
+            }
+            // The current term becomes the parent for the next iteration.
+            $parent_id = $final_term_id;
+        }
+
+        return $final_term_id;
     }
 }
