@@ -36,6 +36,11 @@ class Product_Manager {
             $product_id = $product->save();
 
             if ( $product_id ) {
+                // Set the current user as the author of the product.
+                wp_update_post( [
+                    'ID'          => $product_id,
+                    'post_author' => get_current_user_id(),
+                ] );
                 $created_product_ids[] = $product_id;
             }
         }
