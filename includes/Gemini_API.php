@@ -145,7 +145,12 @@ class Gemini_API {
             }
         }
 
-        $body = [ 'contents' => [ [ 'parts' => $parts ] ] ];
+        $body = [
+			'contents' => [ [ 'parts' => $parts ] ],
+			'generationConfig' => [
+				'responseMimeType' => 'application/json',
+			]
+		];
 
         $response = wp_remote_post(
             $api_url,
@@ -171,20 +176,75 @@ class Gemini_API {
             return new \WP_Error( 'api_invalid_response', __( 'Invalid response from Gemini API.', 'relovit' ), $data );
         }
 
-        return $data['candidates'][0]['content']['parts'][0]['text'];
+        $text = $data['candidates'][0]['content']['parts'][0]['text'];
+
+        // Clean the response: remove markdown code blocks if present.
+        $text = preg_replace( '/^```(html|json)?\s*/', '', $text );
+        $text = preg_replace( '/\s*```$/', '', $text );
+
+        return trim( $text );
     }
 
     /**
-     * Generate a product category from images.
+     * Helper function to get a text representation of the product category tree.
+     *
+     * @param int    $parent_id The parent category ID.
+     * @param string $prefix    The prefix for the current level.
+     * @return string The text representation of the category tree.
+     */
+    private function get_category_tree_text( $parent_id = 0, $prefix = '' ) {
+        $terms = get_terms( [
+            'taxonomy'   => 'product_cat',
+            'hide_empty' => false,
+            'parent'     => $parent_id,
+        ] );
+
+        $tree = '';
+        if ( ! empty( $terms ) && ! is_wp_error( $terms ) ) {
+            foreach ( $terms as $term ) {
+                $tree .= $prefix . $term->name . "\n";
+                $tree .= $this->get_category_tree_text( $term->term_id, $prefix . '- ' );
+            }
+        }
+        return $tree;
+    }
+
+    /**
+     * Generate product categories (hierarchical) and tags from images.
      *
      * @param string $product_name The name of the product.
      * @param array  $image_paths  An array of paths to the image files.
-     * @return string|WP_Error
+     * @return array|WP_Error An array containing 'category' (array of names) and 'tags' (array of strings), or an error.
      */
-    public function generate_category( $product_name, $image_paths ) {
-        $categories = get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => false, 'fields' => 'slugs' ] );
-        $prompt     = "En te basant sur le nom du produit '" . esc_html( $product_name ) . "' et les images fournies, choisis la catégorie la plus pertinente dans la liste suivante : " . implode( ', ', $categories ) . ". Réponds uniquement avec le slug de la catégorie (par exemple : 'livres').";
-        return $this->call_vision_api( $prompt, $image_paths );
+    public function generate_taxonomy_terms( $product_name, $image_paths ) {
+        $category_tree = $this->get_category_tree_text();
+        $prompt        = "En tant qu'expert en e-commerce et SEO, analyse le produit '" . esc_html( $product_name ) . "' à partir des images fournies.
+En te basant sur l'arborescence de catégories suivante :
+---
+$category_tree
+---
+1.  **Catégorie :** Choisis le chemin de catégorie le plus pertinent. Si une catégorie adéquate n'existe pas, tu peux en proposer une nouvelle. Le chemin doit être une liste de noms, du parent à l'enfant (ex: [\"Vêtements\", \"Chemises\"]).
+2.  **Tags :** Suggère une liste de 3 à 5 tags pertinents (en français) qui décrivent les caractéristiques, le style, le matériau ou l'usage de l'objet (ex: [\"coton\", \"manches longues\", \"formel\", \"vintage\"]).
+
+Réponds **uniquement** avec un objet JSON valide contenant deux clés : 'category' (un tableau de chaînes de caractères pour le chemin de la catégorie) et 'tags' (un tableau de chaînes de caractères pour les tags).
+Exemple de format de réponse :
+{
+  \"category\": [\"Maison\", \"Décoration\", \"Vases\"],
+  \"tags\": [\"céramique\", \"moderne\", \"décoratif\", \"fleurs\"]
+}";
+
+        $response_json = $this->call_vision_api( $prompt, $image_paths );
+
+        if ( is_wp_error( $response_json ) ) {
+            return $response_json;
+        }
+
+        $result = json_decode( $response_json, true );
+        if ( json_last_error() !== JSON_ERROR_NONE ) {
+            return new \WP_Error( 'json_decode_error', 'Could not decode the JSON response from the API.', [ 'response' => $response_json ] );
+        }
+
+        return $result;
     }
 
     /**
