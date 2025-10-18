@@ -71,16 +71,34 @@ class API {
             return new \WP_Error( 'no_image', 'No image was provided.', [ 'status' => 400 ] );
         }
 
-        // Handle the file upload using WordPress functions.
-        require_once ABSPATH . 'wp-admin/includes/image.php';
-        require_once ABSPATH . 'wp-admin/includes/file.php';
-        require_once ABSPATH . 'wp-admin/includes/media.php';
+        $file = $files['relovit_image'];
 
-        $attachment_id = media_handle_upload( 'relovit_image', 0 );
+        // Since the JS sends a blob, we handle it with wp_upload_bits.
+        // The file content is in 'tmp_name' for REST API file uploads.
+        $upload = wp_upload_bits( $file['name'], null, file_get_contents( $file['tmp_name'] ) );
+
+        if ( ! empty( $upload['error'] ) ) {
+            return new \WP_Error( 'upload_error', $upload['error'], [ 'status' => 500 ] );
+        }
+
+        // Create the attachment.
+        $attachment = [
+            'post_mime_type' => $upload['type'],
+            'post_title'     => sanitize_file_name( $upload['file'] ),
+            'post_content'   => '',
+            'post_status'    => 'inherit',
+        ];
+
+        $attachment_id = wp_insert_attachment( $attachment, $upload['file'] );
 
         if ( is_wp_error( $attachment_id ) ) {
-            return new \WP_Error( 'upload_error', $attachment_id->get_error_message(), [ 'status' => 500 ] );
+            return new \WP_Error( 'attachment_error', $attachment_id->get_error_message(), [ 'status' => 500 ] );
         }
+
+        // Generate attachment metadata.
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        $attachment_data = wp_generate_attachment_metadata( $attachment_id, $upload['file'] );
+        wp_update_attachment_metadata( $attachment_id, $attachment_data );
 
         $image_path = get_attached_file( $attachment_id );
 
@@ -93,10 +111,8 @@ class API {
             return $result;
         }
 
-        // Store the attachment ID in a transient for the next step.
-        set_transient( 'relovit_image_id_' . get_current_user_id(), $attachment_id, HOUR_IN_SECONDS );
-
-        return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'items' => $result ] ], 200 );
+        // The attachment ID is now passed back to the client to be included in the next request.
+        return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'items' => $result, 'attachment_id' => $attachment_id ] ], 200 );
     }
 
     /**
@@ -111,10 +127,15 @@ class API {
             return new \WP_Error( 'no_items', 'No items were selected.', [ 'status' => 400 ] );
         }
 
-        $image_id = get_transient( 'relovit_image_id_' . get_current_user_id() );
-        if ( ! $image_id ) {
-            return new \WP_Error( 'no_image_id', 'Could not find the original image. Please try again.', [ 'status' => 400 ] );
+        $image_id = $request->get_param( 'attachment_id' );
+        if ( ! $image_id || ! is_numeric( $image_id ) ) {
+            return new \WP_Error( 'no_image_id', 'Could not find the original image ID. Please try again.', [ 'status' => 400 ] );
         }
+        // Verify the attachment exists and is an image.
+        if ( ! wp_get_attachment_url( $image_id ) ) {
+            return new \WP_Error( 'invalid_image_id', 'The provided image ID is not valid.', [ 'status' => 400 ] );
+        }
+
 
         $product_manager  = new Product_Manager();
         $created_products = $product_manager->create_draft_products( $items, $image_id );
@@ -128,9 +149,6 @@ class API {
                 ]
             );
         }
-
-        // Delete the transient.
-        delete_transient( 'relovit_image_id_' . get_current_user_id() );
 
         if ( count( $created_products ) > 0 ) {
             $message = sprintf( _n( '%s product draft created.', '%s product drafts created.', count( $created_products ), 'relovit' ), count( $created_products ) );
