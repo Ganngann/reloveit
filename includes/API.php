@@ -46,6 +46,16 @@ class API {
                 'permission_callback' => [ $this, 'check_permissions' ],
             ]
         );
+
+        register_rest_route(
+            'relovit/v1',
+            '/enrich-product',
+            [
+                'methods'             => \WP_REST_Server::CREATABLE,
+                'callback'            => [ $this, 'enrich_product' ],
+                'permission_callback' => [ $this, 'check_permissions' ],
+            ]
+        );
     }
 
     /**
@@ -106,14 +116,24 @@ class API {
             return new \WP_Error( 'no_image_id', 'Could not find the original image. Please try again.', [ 'status' => 400 ] );
         }
 
-        $product_manager = new Product_Manager();
-        $created_count   = $product_manager->create_draft_products( $items, $image_id );
+        $product_manager  = new Product_Manager();
+        $created_products = $product_manager->create_draft_products( $items, $image_id );
+
+        // If only one product was created, attach the image to it.
+        if ( count( $created_products ) === 1 ) {
+            wp_update_post(
+                [
+                    'ID'          => $image_id,
+                    'post_parent' => $created_products[0],
+                ]
+            );
+        }
 
         // Delete the transient.
         delete_transient( 'relovit_image_id_' . get_current_user_id() );
 
-        if ( $created_count > 0 ) {
-            $message = sprintf( _n( '%s product draft created.', '%s product drafts created.', $created_count, 'relovit' ), $created_count );
+        if ( count( $created_products ) > 0 ) {
+            $message = sprintf( _n( '%s product draft created.', '%s product drafts created.', count( $created_products ), 'relovit' ), count( $created_products ) );
             return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => $message ] ], 200 );
         }
 
@@ -133,5 +153,171 @@ class API {
             return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to create products.', 'relovit' ), [ 'status' => 403 ] );
         }
         return true;
+    }
+
+    /**
+     * Enrich a product with AI-generated content.
+     *
+     * @param \WP_REST_Request $request Full data about the request.
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function enrich_product( $request ) {
+        $product_id = $request->get_param( 'product_id' );
+        $files      = $request->get_file_params();
+
+        if ( empty( $product_id ) ) {
+            return new \WP_Error( 'no_product_id', 'No product ID was provided.', [ 'status' => 400 ] );
+        }
+
+        $tasks = $request->get_param( 'relovit_tasks' ) ?: [];
+        if ( empty( $tasks ) ) {
+            return new \WP_Error( 'no_tasks', 'Please select at least one task to perform.', [ 'status' => 400 ] );
+        }
+
+        // Handle file uploads.
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+
+        $attachment_ids = [];
+        $image_paths    = [];
+
+        $attachment_ids = [];
+        $image_paths    = [];
+
+        if ( ! empty( $files['relovit_images'] ) ) {
+            $upload_overrides = [ 'test_form' => false ];
+
+            foreach ( $files['relovit_images']['tmp_name'] as $key => $tmp_name ) {
+                if ( empty( $tmp_name ) ) {
+                    continue;
+                }
+                $uploaded_file = [
+                    'name'     => $files['relovit_images']['name'][ $key ],
+                    'type'     => $files['relovit_images']['type'][ $key ],
+                    'tmp_name' => $tmp_name,
+                    'error'    => $files['relovit_images']['error'][ $key ],
+                    'size'     => $files['relovit_images']['size'][ $key ],
+                ];
+
+                $movefile = wp_handle_upload( $uploaded_file, $upload_overrides );
+
+                if ( $movefile && ! isset( $movefile['error'] ) ) {
+                    $attachment = [
+                        'guid'           => $movefile['url'],
+                        'post_mime_type' => $movefile['type'],
+                        'post_title'     => preg_replace( '/\.[^.]+$/', '', basename( $movefile['file'] ) ),
+                        'post_content'   => '',
+                        'post_status'    => 'inherit',
+                    ];
+
+                    $attachment_id = wp_insert_attachment( $attachment, $movefile['file'], $product_id );
+                    require_once ABSPATH . 'wp-admin/includes/image.php';
+                    $attachment_data = wp_generate_attachment_metadata( $attachment_id, $movefile['file'] );
+                    wp_update_attachment_metadata( $attachment_id, $attachment_data );
+
+                    $attachment_ids[] = $attachment_id;
+                    $image_paths[]    = $movefile['file'];
+                } else {
+                    return new \WP_Error( 'upload_error', $movefile['error'], [ 'status' => 500 ] );
+                }
+            }
+        }
+
+        // Get the main product image as well.
+        $main_image_id = get_post_thumbnail_id( $product_id );
+        if ( $main_image_id ) {
+            $image_paths[] = get_attached_file( $main_image_id );
+        }
+
+        // Get gallery images.
+        $product = wc_get_product( $product_id );
+        $gallery_image_ids = $product->get_gallery_image_ids();
+        foreach ( $gallery_image_ids as $gallery_image_id ) {
+            $image_paths[] = get_attached_file( $gallery_image_id );
+        }
+        $image_paths = array_unique( $image_paths );
+
+        if ( empty( $image_paths ) ) {
+            return new \WP_Error( 'no_images_found', 'No images found for this product. Please upload at least one.', [ 'status' => 400 ] );
+        }
+
+        if ( ! $product ) {
+            return new \WP_Error( 'product_not_found', 'The specified product could not be found.', [ 'status' => 404 ] );
+        }
+
+        $product_name = $product->get_name();
+        $gemini_api   = new Gemini_API();
+
+        $tasks = $request->get_param( 'relovit_tasks' ) ?: [];
+
+        if ( in_array( 'description', $tasks, true ) ) {
+            $description = $gemini_api->generate_description( $product_name, $image_paths );
+            if ( is_wp_error( $description ) ) {
+                return $description;
+            }
+            $product->set_description( $description );
+        }
+
+        if ( in_array( 'price', $tasks, true ) ) {
+            $price = $gemini_api->generate_price( $product_name, $image_paths );
+            if ( is_wp_error( $price ) ) {
+                return $price;
+            }
+            $product->set_regular_price( floatval( $price ) );
+        }
+
+        if ( in_array( 'category', $tasks, true ) ) {
+            $category_slug = $gemini_api->generate_category( $product_name, $image_paths );
+            if ( ! is_wp_error( $category_slug ) ) {
+                $term = get_term_by( 'slug', $category_slug, 'product_cat' );
+                if ( $term ) {
+                    $product->set_category_ids( [ $term->term_id ] );
+                }
+            }
+        }
+
+        if ( in_array( 'image', $tasks, true ) && ! empty( $image_paths ) ) {
+            $generated_image_data = $gemini_api->generate_image( $image_paths[0] );
+
+            if ( is_wp_error( $generated_image_data ) ) {
+                return $generated_image_data;
+            }
+
+            // Upload the generated image from base64 data.
+            $upload = wp_upload_bits( 'generated-image.png', null, base64_decode( $generated_image_data ) );
+            if ( ! empty( $upload['error'] ) ) {
+                return new \WP_Error( 'image_gen_upload_failed', $upload['error'], [ 'status' => 500 ] );
+            }
+
+            $attachment = [
+                'post_mime_type' => 'image/png',
+                'post_title'     => $product_name . ' - AI Generated',
+                'post_content'   => '',
+                'post_status'    => 'inherit',
+            ];
+            $new_attachment_id = wp_insert_attachment( $attachment, $upload['file'], $product_id );
+            if ( is_wp_error( $new_attachment_id ) ) {
+                return $new_attachment_id;
+            }
+
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+            $attachment_data = wp_generate_attachment_metadata( $new_attachment_id, $upload['file'] );
+            wp_update_attachment_metadata( $new_attachment_id, $attachment_data );
+            $product->set_image_id( $new_attachment_id );
+        }
+
+        // Update the product.
+        $existing_gallery_ids = $product->get_gallery_image_ids();
+        $new_gallery_ids      = array_unique( array_merge( $existing_gallery_ids, $attachment_ids ) );
+        $product->set_gallery_image_ids( $new_gallery_ids );
+        $product->set_status( 'pending' );
+        $result = $product->save();
+
+        if ( is_wp_error( $result ) || $result === 0 ) {
+            return new \WP_Error( 'product_save_failed', __( 'Could not save the product after enrichment.', 'relovit' ), [ 'status' => 500 ] );
+        }
+
+        return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => __( 'Product enriched successfully!', 'relovit' ) ] ], 200 );
     }
 }

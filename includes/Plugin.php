@@ -64,6 +64,7 @@ class Plugin {
 
         if ( is_admin() ) {
             require_once RELOVIT_PLUGIN_DIR . 'includes/Admin.php';
+            require_once RELOVIT_PLUGIN_DIR . 'includes/Metabox.php';
         }
     }
 
@@ -76,6 +77,7 @@ class Plugin {
 
         if ( is_admin() ) {
             new Admin();
+            new Metabox();
         }
     }
 }
