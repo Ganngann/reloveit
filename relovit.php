@@ -35,4 +35,5 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/Plugin.php';
 function run_relovit() {
     return \Relovit\Plugin::instance();
 }
+
 run_relovit();

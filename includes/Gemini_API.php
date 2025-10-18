@@ -61,12 +61,11 @@ class Gemini_API {
     /**
      * Generate a product price from images.
      */
-    public function generate_price( $product_name, $image_paths ) {
-        $price_range_key = Settings::get('price_range');
-        $price_range_text = Settings::get_price_range_prompt_text($price_range_key);
+    public function generate_price( $product_name, $image_paths, $price_range = 'Moyen' ) {
+        $price_range_text = Settings::get_price_range_prompt_text( $price_range );
         $store_context = Settings::get('store_context');
 
-        $prompt = "En tenant compte du marché actuel des objets d'occasion, de l'état apparent de l'objet " . esc_html( $product_name ) . " dans ces images et du contexte de la boutique (" . esc_html($store_context) . "), proposez " . esc_html($price_range_text) . " en EUR. Répondez uniquement avec le prix au format numérique (exemple: 45.99).";
+        $prompt = "En tenant compte du marché actuel des objets d'occasion, de l'état apparent de l'objet " . esc_html( $product_name ) . " dans ces images et du contexte de la boutique (" . esc_html($store_context) . "), proposez un prix dans la gamme '" . esc_html($price_range_text) . "' en EUR. Répondez uniquement avec le prix au format numérique (exemple: 45.99).";
 
         return $this->call_vision_api( $prompt, $image_paths );
     }

@@ -278,7 +278,9 @@ class API {
         }
 
         if ( in_array( 'price', $tasks, true ) ) {
-            $price = $gemini_api->generate_price( $product_name, $image_paths );
+            $user_id = get_current_user_id();
+            $price_range = get_user_meta( $user_id, 'relovit_price_range', true );
+            $price = $gemini_api->generate_price( $product_name, $image_paths, $price_range ?: 'Moyen' );
             if ( is_wp_error( $price ) ) {
                 return $price;
             }
