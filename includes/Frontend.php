@@ -18,8 +18,84 @@ class Frontend {
      * Frontend constructor.
      */
     public function __construct() {
-        add_action( 'init', [ $this, 'register_shortcodes' ] );
+        add_action( 'init', [ $this, 'init_hooks' ] );
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
+    }
+
+    /**
+     * Initialize hooks.
+     */
+    public function init_hooks() {
+        $this->register_shortcodes();
+
+        // WooCommerce hooks for "My Account" page.
+        add_filter( 'woocommerce_account_menu_items', [ $this, 'relovit_account_menu_items' ] );
+        add_action( 'init', [ $this, 'relovit_add_my_account_endpoint' ] );
+        add_action( 'woocommerce_account_relovit-settings_endpoint', [ $this, 'relovit_settings_content' ] );
+        add_action( 'init', [ $this, 'relovit_save_settings' ] );
+    }
+
+    /**
+     * Save the settings from the "Relovit Settings" page.
+     */
+    public function relovit_save_settings() {
+        if ( ! isset( $_POST['relovit_save_settings'] ) || ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( $_POST['_wpnonce'], 'relovit_save_settings' ) ) {
+            return;
+        }
+
+        $user_id = get_current_user_id();
+        if ( ! $user_id ) {
+            return;
+        }
+
+        if ( isset( $_POST['relovit_price_range'] ) ) {
+            $price_range = sanitize_text_field( $_POST['relovit_price_range'] );
+            // Optional: Add validation to ensure the value is one of the allowed options.
+            update_user_meta( $user_id, 'relovit_price_range', $price_range );
+        }
+    }
+
+    /**
+     * Add "Relovit Settings" to the My Account menu.
+     *
+     * @param array $items Menu items.
+     * @return array
+     */
+    public function relovit_account_menu_items( $items ) {
+        $items['relovit-settings'] = __( 'Relovit Settings', 'relovit' );
+        return $items;
+    }
+
+    /**
+     * Add endpoint for the "Relovit Settings" page.
+     */
+    public function relovit_add_my_account_endpoint() {
+        add_rewrite_endpoint( 'relovit-settings', EP_PAGES );
+    }
+
+    /**
+     * Display the content for the "Relovit Settings" page.
+     */
+    public function relovit_settings_content() {
+        $user_id = get_current_user_id();
+        $current_price_range = get_user_meta( $user_id, 'relovit_price_range', true );
+        ?>
+        <h3><?php esc_html_e( 'Relovit Settings', 'relovit' ); ?></h3>
+        <form method="post">
+            <?php wp_nonce_field( 'relovit_save_settings' ); ?>
+            <p>
+                <label for="relovit_price_range"><?php esc_html_e( 'Default Price Range', 'relovit' ); ?></label>
+                <select id="relovit_price_range" name="relovit_price_range" class="woocommerce-Input woocommerce-Input--select">
+                    <option value="Bon marché" <?php selected( $current_price_range, 'Bon marché' ); ?>><?php esc_html_e( 'Inexpensive', 'relovit' ); ?></option>
+                    <option value="Moyen" <?php selected( $current_price_range, 'Moyen' ); ?>><?php esc_html_e( 'Average', 'relovit' ); ?></option>
+                    <option value="Cher" <?php selected( $current_price_range, 'Cher' ); ?>><?php esc_html_e( 'Expensive', 'relovit' ); ?></option>
+                </select>
+            </p>
+            <p>
+                <button type="submit" class="woocommerce-Button button" name="relovit_save_settings" value="<?php esc_attr_e( 'Save changes', 'relovit' ); ?>"><?php esc_html_e( 'Save changes', 'relovit' ); ?></button>
+            </p>
+        </form>
+        <?php
     }
 
     /**
