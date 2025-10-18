@@ -34,7 +34,10 @@ class Frontend {
         add_filter( 'query_vars', [ $this, 'relovit_add_query_vars' ], 0 );
         add_action( 'woocommerce_account_relovit-settings_endpoint', [ $this, 'relovit_settings_content' ] );
         add_action( 'woocommerce_account_relovit-products_endpoint', [ $this, 'relovit_products_content' ] );
+        add_action( 'woocommerce_account_relovit-edit-product_endpoint', [ $this, 'relovit_edit_product_content' ] );
         add_action( 'template_redirect', [ $this, 'relovit_save_settings' ] );
+        add_action( 'template_redirect', [ $this, 'relovit_save_product' ] );
+        add_action( 'init', [ $this, 'flush_rewrite_rules_on_load' ] );
     }
 
     /**
@@ -78,6 +81,7 @@ class Frontend {
     public function relovit_add_my_account_endpoint() {
         add_rewrite_endpoint( 'relovit-settings', EP_PAGES );
         add_rewrite_endpoint( 'relovit-products', EP_PAGES );
+        add_rewrite_endpoint( 'relovit-edit-product', EP_PAGES );
     }
 
     /**
@@ -89,7 +93,52 @@ class Frontend {
     public function relovit_add_query_vars( $vars ) {
         $vars[] = 'relovit-settings';
         $vars[] = 'relovit-products';
+        $vars[] = 'relovit-edit-product';
         return $vars;
+    }
+
+    /**
+     * Flush rewrite rules on plugin update to prevent 404 errors.
+     * This is tied to the plugin version to ensure it runs on updates.
+     */
+    public function flush_rewrite_rules_on_load() {
+        $current_version = get_option( 'relovit_version', '0' );
+        if ( version_compare( $current_version, RELOVIT_VERSION, '<' ) ) {
+            $this->relovit_add_my_account_endpoint();
+            flush_rewrite_rules();
+            update_option( 'relovit_version', RELOVIT_VERSION );
+        }
+    }
+
+    /**
+     * Save the product from the "Relovit Edit Product" page.
+     */
+    public function relovit_save_product() {
+        if ( ! isset( $_POST['relovit_save_product'] ) || ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( $_POST['_wpnonce'], 'relovit_edit_product' ) ) {
+            return;
+        }
+
+        $product_id = isset( $_POST['relovit_product_id'] ) ? intval( $_POST['relovit_product_id'] ) : 0;
+        $product = wc_get_product( $product_id );
+
+        // Security check: Ensure the product exists and belongs to the current user.
+        if ( ! $product || $product->get_author() != get_current_user_id() ) {
+            wc_add_notice( __( 'Invalid product.', 'relovit' ), 'error' );
+            return;
+        }
+
+        $title = isset( $_POST['relovit_product_title'] ) ? sanitize_text_field( $_POST['relovit_product_title'] ) : '';
+        $description = isset( $_POST['relovit_product_description'] ) ? wp_kses_post( $_POST['relovit_product_description'] ) : '';
+        $price = isset( $_POST['relovit_product_price'] ) ? wc_format_decimal( $_POST['relovit_product_price'] ) : '';
+
+        $product->set_name( $title );
+        $product->set_description( $description );
+        $product->set_regular_price( $price );
+        $product->save();
+
+        wc_add_notice( __( 'Product saved successfully.', 'relovit' ), 'success' );
+        wp_redirect( wc_get_account_endpoint_url( 'relovit-products' ) );
+        exit;
     }
 
     /**
@@ -156,7 +205,7 @@ class Frontend {
                     ?>
                     <tr class="woocommerce-table__line-item order_item">
                         <td class="woocommerce-table__product-name product-name">
-                            <a href="<?php echo esc_url( get_edit_post_link( get_the_ID() ) ); ?>"><?php the_title(); ?></a>
+                            <a href="<?php echo esc_url( wc_get_endpoint_url( 'relovit-edit-product', get_the_ID() ) ); ?>"><?php the_title(); ?></a>
                         </td>
                         <td class="woocommerce-table__product-status product-status">
                             <?php
@@ -168,7 +217,7 @@ class Frontend {
                             <?php echo wp_kses_post( $product->get_price_html() ); ?>
                         </td>
                         <td class="woocommerce-table__product-actions product-actions">
-                            <a href="<?php echo esc_url( get_edit_post_link( get_the_ID(), 'raw' ) ); ?>" class="button edit"><?php esc_html_e( 'Edit', 'relovit' ); ?></a>
+                            <a href="<?php echo esc_url( wc_get_endpoint_url( 'relovit-edit-product', get_the_ID() ) ); ?>" class="button edit"><?php esc_html_e( 'Edit', 'relovit' ); ?></a>
                             <a href="#" class="button delete" data-product-id="<?php echo get_the_ID(); ?>"><?php esc_html_e( 'Delete', 'relovit' ); ?></a>
                         </td>
                     </tr>
@@ -178,6 +227,45 @@ class Frontend {
                 ?>
             </tbody>
         </table>
+        <?php
+    }
+
+    /**
+     * Display the content for the "Relovit Edit Product" page.
+     */
+    public function relovit_edit_product_content() {
+        global $wp;
+        $product_id = $wp->query_vars['relovit-edit-product'];
+        $product = wc_get_product( $product_id );
+
+        // Security check: Ensure the product exists and belongs to the current user.
+        if ( ! $product || $product->get_author() != get_current_user_id() ) {
+            wc_add_notice( __( 'Invalid product.', 'relovit' ), 'error' );
+            echo '<a href="' . esc_url( wc_get_account_endpoint_url( 'relovit-products' ) ) . '">' . __( 'Go back to your products', 'relovit' ) . '</a>';
+            return;
+        }
+
+        ?>
+        <h3><?php printf( esc_html__( 'Edit Product: %s', 'relovit' ), $product->get_name() ); ?></h3>
+        <form method="post">
+            <?php wp_nonce_field( 'relovit_edit_product' ); ?>
+            <p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
+                <label for="relovit_product_title"><?php esc_html_e( 'Title', 'relovit' ); ?></label>
+                <input type="text" class="woocommerce-Input woocommerce-Input--text input-text" name="relovit_product_title" id="relovit_product_title" value="<?php echo esc_attr( $product->get_name() ); ?>">
+            </p>
+            <p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
+                <label for="relovit_product_description"><?php esc_html_e( 'Description', 'relovit' ); ?></label>
+                <textarea class="woocommerce-Input woocommerce-Input--textarea input-text" name="relovit_product_description" id="relovit_product_description" rows="5"><?php echo esc_textarea( $product->get_description() ); ?></textarea>
+            </p>
+            <p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
+                <label for="relovit_product_price"><?php esc_html_e( 'Price', 'relovit' ); ?></label>
+                <input type="text" class="woocommerce-Input woocommerce-Input--text input-text" name="relovit_product_price" id="relovit_product_price" value="<?php echo esc_attr( $product->get_price() ); ?>">
+            </p>
+            <p>
+                <button type="submit" class="woocommerce-Button button" name="relovit_save_product" value="<?php esc_attr_e( 'Save changes', 'relovit' ); ?>"><?php esc_html_e( 'Save changes', 'relovit' ); ?></button>
+                <input type="hidden" name="relovit_product_id" value="<?php echo esc_attr( $product_id ); ?>">
+            </p>
+        </form>
         <?php
     }
 

@@ -53,7 +53,7 @@ class API {
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [ $this, 'enrich_product' ],
-                'permission_callback' => [ $this, 'check_product_permission' ],
+                'permission_callback' => [ $this, 'check_enrich_permission' ],
             ]
         );
 
@@ -186,11 +186,36 @@ class API {
             return new \WP_Error( 'rest_not_logged_in', __( 'You are not currently logged in.', 'relovit' ), [ 'status' => 401 ] );
         }
 
-        $product_id = $request->get_param( 'id' ) ?: $request->get_param( 'product_id' );
+        $product_id = $request->get_param( 'id' );
+
         if ( ! $product_id ) {
-            // This is for the enrich-product endpoint which uses product_id in the body
-            $product_id = $request->get_param( 'product_id' );
+            return new \WP_Error( 'rest_product_invalid_id', __( 'Invalid product ID.', 'relovit' ), [ 'status' => 404 ] );
         }
+
+        $product = get_post( $product_id );
+        if ( ! $product || 'product' !== $product->post_type ) {
+            return new \WP_Error( 'rest_product_invalid_id', __( 'Invalid product ID.', 'relovit' ), [ 'status' => 404 ] );
+        }
+
+        if ( get_current_user_id() != $product->post_author ) {
+            return new \WP_Error( 'rest_forbidden_context', __( 'Sorry, you are not allowed to access this product.', 'relovit' ), [ 'status' => 403 ] );
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if the user has the required permissions for enriching a product.
+     *
+     * @param \WP_REST_Request $request
+     * @return bool|\WP_Error
+     */
+    public function check_enrich_permission( $request ) {
+        if ( ! is_user_logged_in() ) {
+            return new \WP_Error( 'rest_not_logged_in', __( 'You are not currently logged in.', 'relovit' ), [ 'status' => 401 ] );
+        }
+
+        $product_id = $request->get_param('product_id');
 
         if ( ! $product_id ) {
             return new \WP_Error( 'rest_product_invalid_id', __( 'Invalid product ID.', 'relovit' ), [ 'status' => 404 ] );
@@ -230,21 +255,6 @@ class API {
         }
 
         return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => 'Product deleted successfully.' ] ], 200 );
-    }
-
-    /**
-     * Check if the user has the required permissions.
-     *
-     * @return bool|\WP_Error
-     */
-    public function check_permissions() {
-        if ( ! current_user_can( 'upload_files' ) ) {
-            return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to upload files.', 'relovit' ), [ 'status' => 403 ] );
-        }
-        if ( ! current_user_can( 'edit_products' ) ) {
-            return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to create products.', 'relovit' ), [ 'status' => 403 ] );
-        }
-        return true;
     }
 
     /**
