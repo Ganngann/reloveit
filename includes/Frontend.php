@@ -37,7 +37,6 @@ class Frontend {
         add_action( 'woocommerce_account_relovit-edit-product_endpoint', [ $this, 'relovit_edit_product_content' ] );
         add_action( 'template_redirect', [ $this, 'relovit_save_settings' ] );
         add_action( 'template_redirect', [ $this, 'relovit_save_product' ] );
-        add_action( 'init', [ $this, 'flush_rewrite_rules_on_load' ] );
     }
 
     /**
@@ -78,7 +77,7 @@ class Frontend {
     /**
      * Add endpoint for the "Relovit Settings" page.
      */
-    public function relovit_add_my_account_endpoint() {
+    public static function relovit_add_my_account_endpoint() {
         add_rewrite_endpoint( 'relovit-settings', EP_PAGES );
         add_rewrite_endpoint( 'relovit-products', EP_PAGES );
         add_rewrite_endpoint( 'relovit-edit-product', EP_PAGES );
@@ -95,19 +94,6 @@ class Frontend {
         $vars[] = 'relovit-products';
         $vars[] = 'relovit-edit-product';
         return $vars;
-    }
-
-    /**
-     * Flush rewrite rules on plugin update to prevent 404 errors.
-     * This is tied to the plugin version to ensure it runs on updates.
-     */
-    public function flush_rewrite_rules_on_load() {
-        $current_version = get_option( 'relovit_version', '0' );
-        if ( version_compare( $current_version, RELOVIT_VERSION, '<' ) ) {
-            $this->relovit_add_my_account_endpoint();
-            flush_rewrite_rules();
-            update_option( 'relovit_version', RELOVIT_VERSION );
-        }
     }
 
     /**
