@@ -95,14 +95,14 @@ class Frontend {
 
     /**
      * Flush rewrite rules on plugin update to prevent 404 errors.
-     * This runs once to avoid performance issues.
+     * This is tied to the plugin version to ensure it runs on updates.
      */
     public function flush_rewrite_rules_on_load() {
-        if ( get_option( 'relovit_flush_rewrite_rules_flag' ) ) {
-            return;
+        $current_version = get_option( 'relovit_version', '0' );
+        if ( version_compare( $current_version, RELOVIT_VERSION, '<' ) ) {
+            flush_rewrite_rules();
+            update_option( 'relovit_version', RELOVIT_VERSION );
         }
-        flush_rewrite_rules();
-        update_option( 'relovit_flush_rewrite_rules_flag', true );
     }
 
     /**
