@@ -42,7 +42,7 @@ class Frontend {
             <h2>Vendez vos objets en un clin d'œil</h2>
             <p>Téléversez une photo de vos objets et laissez notre IA faire le reste !</p>
             <form id="relovit-upload-form" enctype="multipart/form-data">
-                <input type="file" id="relovit-image-upload" name="relovit_image" accept="image/*" required>
+                <input type="file" id="relovit-image-upload" name="relovit_image" accept="image/*" capture="environment" required>
                 <button type="submit">Identifier les objets</button>
             </form>
             <div id="relovit-results"></div>
