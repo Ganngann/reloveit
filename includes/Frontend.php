@@ -52,8 +52,11 @@ class Frontend {
 
         if ( isset( $_POST['relovit_price_range'] ) ) {
             $price_range = sanitize_text_field( $_POST['relovit_price_range'] );
-            // Optional: Add validation to ensure the value is one of the allowed options.
             update_user_meta( $user_id, 'relovit_price_range', $price_range );
+
+            wc_add_notice( __( 'Settings saved successfully.', 'relovit' ), 'success' );
+            wp_redirect( wc_get_account_endpoint_url( 'relovit-settings' ) );
+            exit;
         }
     }
 
@@ -102,6 +105,7 @@ class Frontend {
      * Display the content for the "Relovit Settings" page.
      */
     public function relovit_settings_content() {
+        wc_print_notices();
         $user_id = get_current_user_id();
         $current_price_range = get_user_meta( $user_id, 'relovit_price_range', true );
         ?>
