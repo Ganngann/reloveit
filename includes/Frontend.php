@@ -33,6 +33,7 @@ class Frontend {
         add_action( 'init', [ $this, 'relovit_add_my_account_endpoint' ] );
         add_action( 'woocommerce_account_relovit-settings_endpoint', [ $this, 'relovit_settings_content' ] );
         add_action( 'init', [ $this, 'relovit_save_settings' ] );
+        add_action( 'init', [ $this, 'flush_rewrite_rules_on_load' ] );
     }
 
     /**
@@ -71,6 +72,18 @@ class Frontend {
      */
     public function relovit_add_my_account_endpoint() {
         add_rewrite_endpoint( 'relovit-settings', EP_PAGES );
+    }
+
+    /**
+     * Flush rewrite rules on plugin update to prevent 404 errors.
+     * This runs once to avoid performance issues.
+     */
+    public function flush_rewrite_rules_on_load() {
+        if ( get_option( 'relovit_flush_rewrite_rules_flag' ) ) {
+            return;
+        }
+        flush_rewrite_rules();
+        update_option( 'relovit_flush_rewrite_rules_flag', true );
     }
 
     /**

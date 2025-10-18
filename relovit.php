@@ -36,24 +36,4 @@ function run_relovit() {
     return \Relovit\Plugin::instance();
 }
 
-/**
- * The code that runs during plugin activation.
- * This action is documented in includes/class-relovit-activator.php
- */
-function activate_relovit() {
-    add_rewrite_endpoint( 'relovit-settings', EP_PAGES );
-    flush_rewrite_rules();
-}
-
-/**
- * The code that runs during plugin deactivation.
- * This action is documented in includes/class-relovit-deactivator.php
- */
-function deactivate_relovit() {
-    flush_rewrite_rules();
-}
-
-register_activation_hook( __FILE__, 'activate_relovit' );
-register_deactivation_hook( __FILE__, 'deactivate_relovit' );
-
 run_relovit();
