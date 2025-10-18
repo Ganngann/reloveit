@@ -183,7 +183,13 @@ class Gemini_API {
             return new \WP_Error( 'api_invalid_response', __( 'Invalid response from Gemini API.', 'relovit' ), $data );
         }
 
-        return $data['candidates'][0]['content']['parts'][0]['text'];
+        $text = $data['candidates'][0]['content']['parts'][0]['text'];
+
+        // Clean the response: remove markdown code blocks if present.
+        $text = preg_replace( '/^```(html)?\s*/', '', $text );
+        $text = preg_replace( '/\s*```$/', '', $text );
+
+        return trim( $text );
     }
 
     /**
