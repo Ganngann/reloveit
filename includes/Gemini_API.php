@@ -104,7 +104,7 @@ class Gemini_API {
      * @return string|WP_Error
      */
     public function generate_description( $product_name, $image_paths ) {
-        $prompt = "En tant qu'expert en vente d'occasion, rédigez une description détaillée, honnête et commerciale d'un " . esc_html( $product_name ) . " basé sur les images fournies, en insistant sur son état et sa valeur pour un acheteur d'occasion. Utilisez un ton engageant. Maximum 300 mots.";
+        $prompt = "En tant qu'expert en vente d'occasion, rédigez une description détaillée, honnête et commerciale d'un " . esc_html( $product_name ) . " basé sur les images fournies. La description doit être formatée en HTML simple (paragraphes <p>, listes <ul><li>, et du texte en gras <strong> si nécessaire). Insistez sur l'état de l'objet et sa valeur pour un acheteur d'occasion. Utilisez un ton engageant. Maximum 300 mots.";
         return $this->call_vision_api( $prompt, $image_paths );
     }
 
