@@ -31,6 +31,7 @@ class Frontend {
         // WooCommerce hooks for "My Account" page.
         add_filter( 'woocommerce_account_menu_items', [ $this, 'relovit_account_menu_items' ] );
         add_action( 'init', [ $this, 'relovit_add_my_account_endpoint' ] );
+        add_filter( 'query_vars', [ $this, 'relovit_add_query_vars' ], 0 );
         add_action( 'woocommerce_account_relovit-settings_endpoint', [ $this, 'relovit_settings_content' ] );
         add_action( 'init', [ $this, 'relovit_save_settings' ] );
         add_action( 'init', [ $this, 'flush_rewrite_rules_on_load' ] );
@@ -72,6 +73,17 @@ class Frontend {
      */
     public function relovit_add_my_account_endpoint() {
         add_rewrite_endpoint( 'relovit-settings', EP_PAGES );
+    }
+
+    /**
+     * Add the custom query var to the public query variables.
+     *
+     * @param array $vars The array of whitelisted query variables.
+     * @return array
+     */
+    public function relovit_add_query_vars( $vars ) {
+        $vars[] = 'relovit-settings';
+        return $vars;
     }
 
     /**
