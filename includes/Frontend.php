@@ -159,7 +159,11 @@ class Frontend {
                             <a href="<?php echo esc_url( get_edit_post_link( get_the_ID() ) ); ?>"><?php the_title(); ?></a>
                         </td>
                         <td class="woocommerce-table__product-status product-status">
-                            <?php echo esc_html( \wc_get_product_status_name( $product->get_status() ) ); ?>
+                            <?php
+                            $status_slug = $product->get_status();
+                            $all_statuses = wc_get_product_statuses();
+                            echo esc_html( $all_statuses[ $status_slug ] ?? ucfirst( $status_slug ) );
+                            ?>
                         </td>
                         <td class="woocommerce-table__product-price product-price">
                             <?php echo wp_kses_post( $product->get_price_html() ); ?>
