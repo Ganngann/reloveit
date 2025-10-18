@@ -16,8 +16,6 @@ class Gemini_API {
 
     /**
      * Get the Gemini API URL.
-     *
-     * @return string|\WP_Error
      */
     private function get_api_url( $model = 'gemini-2.5-flash' ) {
         $api_key = Settings::get( 'gemini_api_key' );
@@ -28,40 +26,14 @@ class Gemini_API {
     }
 
     /**
-     * Replace placeholders in a string.
-     *
-     * @param string $string The string with placeholders.
-     * @param array  $replacements An associative array of placeholder => value.
-     * @return string The string with placeholders replaced.
-     */
-    private function replace_placeholders( $string, $replacements = [] ) {
-        $defaults = [
-            '{language}'      => Settings::get( 'language', 'français' ),
-            '{store_context}' => Settings::get( 'store_context' ),
-            '{price_min}'     => Settings::get( 'price_min', 0 ),
-            '{price_max}'     => Settings::get( 'price_max', 1000 ),
-        ];
-        $replacements = wp_parse_args( $replacements, $defaults );
-
-        foreach ( $replacements as $placeholder => $value ) {
-            $string = str_replace( $placeholder, $value, $string );
-        }
-        return $string;
-    }
-
-    /**
      * Identify objects in an image.
-     *
-     * @param string $image_path Path to the image file.
-     * @return array|WP_Error
      */
     public function identify_objects( $image_path ) {
         if ( ! file_exists( $image_path ) ) {
             return new \WP_Error( 'file_not_found', 'The image file was not found.' );
         }
-
-        $prompt = $this->replace_placeholders( Settings::get( 'prompt_identify' ) );
-
+        // This prompt is purely technical and not exposed to the user.
+        $prompt = "Listez tous les objets distincts et vendables présents dans cette image. Répondez uniquement avec une liste d'éléments séparés par des virgules.";
         $response_text = $this->call_vision_api( $prompt, [ $image_path ], false );
 
         if ( is_wp_error( $response_text ) ) {
@@ -74,50 +46,48 @@ class Gemini_API {
 
     /**
      * Generate a product description from images.
-     *
-     * @param string $product_name The name of the product.
-     * @param array  $image_paths  An array of paths to the image files.
-     * @return string|WP_Error
      */
     public function generate_description( $product_name, $image_paths ) {
-        $prompt = $this->replace_placeholders(
-            Settings::get( 'prompt_description' ),
-            [ '{product_name}' => esc_html( $product_name ) ]
-        );
+        $tone = Settings::get('desc_tone');
+        $keywords = Settings::get('desc_keywords');
+        $language = Settings::get('language');
+        $store_context = Settings::get('store_context');
+
+        $prompt = "En tant qu'expert en vente d'occasion, rédigez une description " . esc_html($tone) . " d'un " . esc_html( $product_name ) . " basé sur les images fournies, " . esc_html($keywords) . ". Utilisez un ton engageant. Maximum 300 mots. Langue de la réponse : " . esc_html($language) . ". Contexte de la boutique : " . esc_html($store_context) . ".";
+
         return $this->call_vision_api( $prompt, $image_paths );
     }
 
     /**
      * Generate a product price from images.
-     *
-     * @param string $product_name The name of the product.
-     * @param array  $image_paths  An array of paths to the image files.
-     * @return string|WP_Error
      */
     public function generate_price( $product_name, $image_paths ) {
-        $prompt = $this->replace_placeholders(
-            Settings::get( 'prompt_price' ),
-            [ '{product_name}' => esc_html( $product_name ) ]
-        );
+        $price_range_key = Settings::get('price_range');
+        $price_range_text = Settings::get_price_range_prompt_text($price_range_key);
+        $store_context = Settings::get('store_context');
+
+        $prompt = "En tenant compte du marché actuel des objets d'occasion, de l'état apparent de l'objet " . esc_html( $product_name ) . " dans ces images et du contexte de la boutique (" . esc_html($store_context) . "), proposez " . esc_html($price_range_text) . " en EUR. Répondez uniquement avec le prix au format numérique (exemple: 45.99).";
+
         return $this->call_vision_api( $prompt, $image_paths );
     }
 
     /**
      * Generate product categories and tags from images.
-     *
-     * @param string $product_name The name of the product.
-     * @param array  $image_paths  An array of paths to the image files.
-     * @return array|WP_Error
      */
     public function generate_taxonomy_terms( $product_name, $image_paths ) {
         $category_tree = $this->get_category_tree_text();
-        $prompt = $this->replace_placeholders(
-            Settings::get( 'prompt_taxonomy' ),
-            [
-                '{product_name}'  => esc_html( $product_name ),
-                '{category_tree}' => $category_tree,
-            ]
-        );
+        $language = Settings::get('language');
+        $seo_focus = Settings::get('taxonomy_seo_focus');
+
+        $prompt = "En tant qu'expert en e-commerce et SEO, analyse le produit '" . esc_html( $product_name ) . "' à partir des images fournies.
+En te basant sur l'arborescence de catégories suivante :
+---
+$category_tree
+---
+1.  **Catégorie :** Choisis le chemin de catégorie le plus pertinent. Si une catégorie adéquate n'existe pas, tu peux en proposer une nouvelle. Le chemin doit être une liste de noms, du parent à l'enfant (ex: [\"Vêtements\", \"Chemises\"]).
+2.  **Tags :** Suggère une liste de 3 à 5 tags " . esc_html($seo_focus) . " (en " . esc_html($language) . ") qui décrivent les caractéristiques, le style, le matériau ou l'usage de l'objet (ex: [\"coton\", \"manches longues\", \"formel\", \"vintage\"]).
+
+Réponds **uniquement** avec un objet JSON valide contenant deux clés : 'category' (un tableau de chaînes de caractères pour le chemin de la catégorie) et 'tags' (un tableau de chaînes de caractères pour les tags).";
 
         $response_json = $this->call_vision_api( $prompt, $image_paths, true );
 
@@ -134,12 +104,10 @@ class Gemini_API {
 
     /**
      * Generate a new product image.
-     *
-     * @param string $image_path Path to the original image.
-     * @return string|WP_Error Base64 encoded image data or an error.
      */
     public function generate_image( $image_path ) {
-        $prompt  = $this->replace_placeholders( Settings::get( 'prompt_image' ) );
+        $bg_style = Settings::get('image_bg_style');
+        $prompt  = "Extrayez l'objet principal de cette image et placez-le " . esc_html($bg_style) . ". L'image générée doit être photoréaliste et de haute qualité.";
         $api_url = $this->get_api_url( 'gemini-2.5-flash-image' );
 
         if ( is_wp_error( $api_url ) ) {
@@ -147,28 +115,12 @@ class Gemini_API {
         }
 
         $body = [
-            'contents' => [
-                [
-                    'parts' => [
-                        [ 'text' => $prompt ],
-                        [
-                            'inline_data' => [
-                                'mime_type' => mime_content_type( $image_path ),
-                                'data'      => base64_encode( file_get_contents( $image_path ) ),
-                            ],
-                        ],
-                    ],
-                ],
-            ],
+            'contents' => [ [ 'parts' => [ [ 'text' => $prompt ], [ 'inline_data' => [ 'mime_type' => mime_content_type( $image_path ), 'data' => base64_encode( file_get_contents( $image_path ) ) ] ] ] ] ],
         ];
 
         $response = wp_remote_post(
             $api_url,
-            [
-                'body'    => json_encode( $body ),
-                'headers' => [ 'Content-Type' => 'application/json' ],
-                'timeout' => 180,
-            ]
+            [ 'body' => json_encode( $body ), 'headers' => [ 'Content-Type' => 'application/json' ], 'timeout' => 180 ]
         );
 
         if ( is_wp_error( $response ) ) {
@@ -176,12 +128,11 @@ class Gemini_API {
         }
 
         $response_body = wp_remote_retrieve_body( $response );
-        $data          = json_decode( $response_body, true );
+        $data = json_decode( $response_body, true );
 
         if ( isset( $data['error'] ) ) {
             return new \WP_Error( 'image_gen_api_error', $data['error']['message'], $data );
         }
-
         if ( ! isset( $data['candidates'][0]['content']['parts'] ) ) {
             return new \WP_Error( 'image_gen_invalid_response', __( 'Invalid response from Image Generation API.', 'relovit' ), $data );
         }
@@ -191,17 +142,11 @@ class Gemini_API {
                 return $part['inlineData']['data'];
             }
         }
-
         return new \WP_Error( 'image_gen_no_image_data', __( 'No image data found in the API response.', 'relovit' ), $data );
     }
 
     /**
      * Call the Gemini Vision API with a prompt and images.
-     *
-     * @param string $prompt      The text prompt.
-     * @param array  $image_paths An array of paths to the image files.
-     * @param bool   $json_mode   Whether to expect a JSON response.
-     * @return string|WP_Error
      */
     private function call_vision_api( $prompt, $image_paths, $json_mode = false ) {
         $api_url = $this->get_api_url();
@@ -212,12 +157,7 @@ class Gemini_API {
         $parts = [ [ 'text' => $prompt ] ];
         foreach ( $image_paths as $image_path ) {
             if ( file_exists( $image_path ) ) {
-                $parts[] = [
-                    'inline_data' => [
-                        'mime_type' => mime_content_type( $image_path ),
-                        'data'      => base64_encode( file_get_contents( $image_path ) ),
-                    ],
-                ];
+                $parts[] = [ 'inline_data' => [ 'mime_type' => mime_content_type( $image_path ), 'data' => base64_encode( file_get_contents( $image_path ) ) ] ];
             }
         }
 
@@ -228,11 +168,7 @@ class Gemini_API {
 
         $response = wp_remote_post(
             $api_url,
-            [
-                'body'    => json_encode( $body ),
-                'headers' => [ 'Content-Type' => 'application/json' ],
-                'timeout' => 60,
-            ]
+            [ 'body' => json_encode( $body ), 'headers' => [ 'Content-Type' => 'application/json' ], 'timeout' => 60 ]
         );
 
         if ( is_wp_error( $response ) ) {
@@ -240,23 +176,20 @@ class Gemini_API {
         }
 
         $response_body = wp_remote_retrieve_body( $response );
-        $data          = json_decode( $response_body, true );
+        $data = json_decode( $response_body, true );
 
         if ( isset( $data['error'] ) ) {
             return new \WP_Error( 'gemini_api_error', $data['error']['message'], $data );
         }
-
         if ( ! isset( $data['candidates'][0]['content']['parts'][0]['text'] ) ) {
             return new \WP_Error( 'api_invalid_response', __( 'Invalid response from Gemini API.', 'relovit' ), $data );
         }
 
         $text = $data['candidates'][0]['content']['parts'][0]['text'];
-
         if ( $json_mode ) {
             $text = preg_replace( '/^```(json)?\s*/', '', $text );
             $text = preg_replace( '/\s*```$/', '', $text );
         }
-
         return trim( $text );
     }
 
@@ -264,12 +197,7 @@ class Gemini_API {
      * Helper function to get a text representation of the product category tree.
      */
     private function get_category_tree_text( $parent_id = 0, $prefix = '' ) {
-        $terms = get_terms( [
-            'taxonomy'   => 'product_cat',
-            'hide_empty' => false,
-            'parent'     => $parent_id,
-        ] );
-
+        $terms = get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => false, 'parent' => $parent_id ] );
         $tree = '';
         if ( ! empty( $terms ) && ! is_wp_error( $terms ) ) {
             foreach ( $terms as $term ) {
