@@ -53,7 +53,24 @@ class API {
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [ $this, 'enrich_product' ],
-                'permission_callback' => [ $this, 'check_permissions' ],
+                'permission_callback' => [ $this, 'check_product_permission' ],
+            ]
+        );
+
+        register_rest_route(
+            'relovit/v1',
+            '/products/(?P<id>\d+)',
+            [
+                'methods'             => \WP_REST_Server::DELETABLE,
+                'callback'            => [ $this, 'delete_product' ],
+                'permission_callback' => [ $this, 'check_product_permission' ],
+                'args'                => [
+                    'id' => [
+                        'validate_callback' => function( $param, $request, $key ) {
+                            return is_numeric( $param );
+                        }
+                    ],
+                ],
             ]
         );
     }
@@ -156,6 +173,63 @@ class API {
         }
 
         return new \WP_Error( 'create_failed', 'Could not create any product drafts.', [ 'status' => 500 ] );
+    }
+
+    /**
+     * Check if the user has the required permissions for a product.
+     *
+     * @param \WP_REST_Request $request
+     * @return bool|\WP_Error
+     */
+    public function check_product_permission( $request ) {
+        if ( ! is_user_logged_in() ) {
+            return new \WP_Error( 'rest_not_logged_in', __( 'You are not currently logged in.', 'relovit' ), [ 'status' => 401 ] );
+        }
+
+        $product_id = $request->get_param( 'id' ) ?: $request->get_param( 'product_id' );
+        if ( ! $product_id ) {
+            // This is for the enrich-product endpoint which uses product_id in the body
+            $product_id = $request->get_param( 'product_id' );
+        }
+
+        if ( ! $product_id ) {
+            return new \WP_Error( 'rest_product_invalid_id', __( 'Invalid product ID.', 'relovit' ), [ 'status' => 404 ] );
+        }
+
+        $product = get_post( $product_id );
+        if ( ! $product || 'product' !== $product->post_type ) {
+            return new \WP_Error( 'rest_product_invalid_id', __( 'Invalid product ID.', 'relovit' ), [ 'status' => 404 ] );
+        }
+
+        if ( get_current_user_id() != $product->post_author ) {
+            return new \WP_Error( 'rest_forbidden_context', __( 'Sorry, you are not allowed to access this product.', 'relovit' ), [ 'status' => 403 ] );
+        }
+
+        return true;
+    }
+
+     /**
+     * Delete a product.
+     *
+     * @param \WP_REST_Request $request Full data about the request.
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function delete_product( $request ) {
+        $product_id = $request->get_param( 'id' );
+        $product    = wc_get_product( $product_id );
+
+        if ( ! $product ) {
+            return new \WP_Error( 'product_not_found', 'The specified product could not be found.', [ 'status' => 404 ] );
+        }
+
+        // Use 'true' to bypass trash and permanently delete.
+        $result = wp_delete_post( $product_id, true );
+
+        if ( ! $result ) {
+            return new \WP_Error( 'delete_failed', 'Could not delete the product.', [ 'status' => 500 ] );
+        }
+
+        return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => 'Product deleted successfully.' ] ], 200 );
     }
 
     /**
