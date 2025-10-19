@@ -52,7 +52,9 @@
                     }
 
                     const formData = new FormData(form[0]);
-                    log('FormData created.');
+                    // Add the nonce to the form data for explicit verification
+                    formData.append('relovit_nonce', relovit_edit_product.nonce);
+                    log('FormData created and nonce appended.');
 
                     spinner.show();
                     enrichBtn.prop('disabled', true);
@@ -64,10 +66,6 @@
                         data: formData,
                         processData: false,
                         contentType: false,
-                        beforeSend: function (xhr) {
-                            xhr.setRequestHeader('X-WP-Nonce', relovit_edit_product.nonce);
-                            log('AJAX: Nonce header set.');
-                        },
                         success: function (response) {
                             log('AJAX SUCCESS received.');
                             if (response.success && response.data) {

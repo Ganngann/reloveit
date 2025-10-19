@@ -193,7 +193,7 @@ class Frontend {
             wp_enqueue_script( 'relovit-edit-product', RELOVIT_PLUGIN_URL . 'assets/js/my-account-edit-product.js', [ 'jquery' ], RELOVIT_VERSION, true );
             wp_localize_script( 'relovit-edit-product', 'relovit_edit_product', [
                 'api_url'           => esc_url_raw( rest_url( 'relovit/v1/enrich-product' ) ),
-                'nonce'             => wp_create_nonce( 'wp_rest' ),
+                'nonce'             => wp_create_nonce( 'relovit_enrich_nonce' ),
                 'product_id'        => $product_id,
                 'no_tasks_selected' => __( 'Please select at least one AI task.', 'relovit' ),
                 'error_message'     => __( 'An error occurred. Please try again.', 'relovit' ),

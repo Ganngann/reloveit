@@ -226,11 +226,14 @@ class API {
      * @return bool|\WP_Error
      */
     public function check_enrich_permission( $request ) {
-        if ( ! is_user_logged_in() ) {
-            return new \WP_Error( 'rest_not_logged_in', __( 'You are not currently logged in.', 'relovit' ), [ 'status' => 401 ] );
+        // Use check_ajax_referer for explicit nonce verification from form data.
+        // The function will die with a 403 response if the nonce is invalid.
+        if ( ! check_ajax_referer( 'relovit_enrich_nonce', 'relovit_nonce', false ) ) {
+             return new \WP_Error( 'rest_nonce_invalid', __( 'Nonce is invalid.', 'relovit' ), [ 'status' => 403 ] );
         }
 
-        $product_id = $request->get_param('product_id');
+        // The product ID is sent as 'relovit_product_id' in the FormData.
+        $product_id = $request->get_param('relovit_product_id');
 
         if ( ! $product_id ) {
             return new \WP_Error( 'rest_product_invalid_id', __( 'Invalid product ID.', 'relovit' ), [ 'status' => 404 ] );
