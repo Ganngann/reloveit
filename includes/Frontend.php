@@ -202,14 +202,17 @@ class Frontend {
      * Display the content for the "Relovit Dashboard" page.
      */
     public function relovit_dashboard_content() {
-        $product_stats = $this->get_seller_product_stats();
-        $sales_stats   = $this->get_seller_sales_stats();
+        $product_stats      = $this->get_seller_product_stats();
+        $sales_stats        = $this->get_seller_sales_stats();
+        $processing_orders  = $this->get_seller_processing_orders();
         ?>
         <div class="relovit-quick-actions">
             <h3 style="margin: 0; flex-grow: 1;"><?php esc_html_e( 'Seller Dashboard', 'relovit' ); ?></h3>
             <a href="<?php echo esc_url( wc_get_account_endpoint_url( 'relovit-products' ) ); ?>" class="button"><?php esc_html_e( 'Add New Product', 'relovit' ); ?></a>
         </div>
         <p><?php esc_html_e( 'Welcome to your dashboard. Here you will find a summary of your sales and products.', 'relovit' ); ?></p>
+
+        <?php $this->render_processing_orders_list( $processing_orders ); ?>
 
         <h4><?php esc_html_e( 'Sales Overview', 'relovit' ); ?></h4>
         <div class="relovit-stat-widgets">
@@ -314,6 +317,21 @@ class Frontend {
     }
 
     /**
+     * Get processing orders for the current seller.
+     *
+     * @return \WC_Order[] An array of order objects.
+     */
+    private function get_seller_processing_orders() {
+        return wc_get_orders( [
+            'status'     => 'wc-processing',
+            'meta_key'   => '_seller_id',
+            'meta_value' => get_current_user_id(),
+            'orderby'    => 'date',
+            'order'      => 'DESC',
+        ] );
+    }
+
+    /**
      * Render the recent products list for the dashboard.
      */
     private function render_dashboard_recent_products() {
@@ -370,6 +388,55 @@ class Frontend {
                 ?>
             </tbody>
         </table>
+        <?php
+    }
+
+    /**
+     * Render the processing orders list for the dashboard.
+     *
+     * @param \WC_Order[] $orders An array of order objects.
+     */
+    private function render_processing_orders_list( $orders ) {
+        ?>
+        <h4><?php esc_html_e( 'Orders to Process', 'relovit' ); ?></h4>
+        <?php if ( empty( $orders ) ) : ?>
+            <p><?php esc_html_e( 'You have no orders to process at the moment.', 'relovit' ); ?></p>
+        <?php else : ?>
+            <table class="woocommerce-table woocommerce-table--order-details shop_table order_details">
+                <thead>
+                    <tr>
+                        <th class="woocommerce-table__product-name product-name"><?php esc_html_e( 'Order', 'relovit' ); ?></th>
+                        <th class="woocommerce-table__product-table product-date"><?php esc_html_e( 'Date', 'relovit' ); ?></th>
+                        <th class="woocommerce-table__product-table product-customer"><?php esc_html_e( 'Customer', 'relovit' ); ?></th>
+                        <th class="woocommerce-table__product-table product-total"><?php esc_html_e( 'Total', 'relovit' ); ?></th>
+                        <th class="woocommerce-table__product-table product-actions"><?php esc_html_e( 'Actions', 'relovit' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ( $orders as $order ) : ?>
+                        <tr class="woocommerce-table__line-item order_item">
+                            <td class="woocommerce-table__product-name product-name">
+                                <a href="<?php echo esc_url( $order->get_edit_order_url() ); ?>" target="_blank">
+                                    #<?php echo esc_html( $order->get_order_number() ); ?>
+                                </a>
+                            </td>
+                            <td class="woocommerce-table__product-date product-date">
+                                <time datetime="<?php echo esc_attr( $order->get_date_created()->date( 'c' ) ); ?>"><?php echo esc_html( $order->get_date_created()->date_i18n( 'd M Y' ) ); ?></time>
+                            </td>
+                            <td class="woocommerce-table__product-customer product-customer">
+                                <?php echo esc_html( $order->get_formatted_billing_full_name() ); ?>
+                            </td>
+                            <td class="woocommerce-table__product-total product-total">
+                                <?php echo wp_kses_post( $order->get_formatted_order_total() ); ?>
+                            </td>
+                            <td class="woocommerce-table__product-actions product-actions">
+                                <a href="<?php echo esc_url( $order->get_edit_order_url() ); ?>" class="button view" target="_blank"><?php esc_html_e( 'View Details', 'relovit' ); ?></a>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
         <?php
     }
 
