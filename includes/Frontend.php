@@ -18,7 +18,7 @@ class Frontend {
      * Frontend constructor.
      */
     public function __construct() {
-        add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
+        add_action( 'wp', [ $this, 'enqueue_scripts' ] );
         add_action( 'init', [ $this, 'register_shortcodes' ] );
 
         // WooCommerce hooks for "My Account" page.
@@ -113,8 +113,6 @@ class Frontend {
         $product->set_description( $description );
         $product->set_regular_price( $price );
 
-        $this->relovit_handle_image_uploads( $product );
-
         if ( isset( $_POST['relovit_enrich'] ) ) {
             $api = new \Relovit\API();
             $request = new \WP_REST_Request( 'POST', '/relovit/v1/enrich-product' );
@@ -131,56 +129,6 @@ class Frontend {
         }
     }
 
-    /**
-     * Handle image uploads for a product.
-     *
-     * @param \WC_Product $product The product object.
-     */
-    private function relovit_handle_image_uploads( $product ) {
-        $product_id = $product->get_id();
-
-        // Handle main image upload
-        if ( isset( $_FILES['relovit_main_image'] ) && ! empty( $_FILES['relovit_main_image']['name'] ) ) {
-            require_once( ABSPATH . 'wp-admin/includes/image.php' );
-            require_once( ABSPATH . 'wp-admin/includes/file.php' );
-            require_once( ABSPATH . 'wp-admin/includes/media.php' );
-
-            $attachment_id = media_handle_upload( 'relovit_main_image', $product_id );
-            if ( ! is_wp_error( $attachment_id ) ) {
-                $product->set_image_id( $attachment_id );
-            }
-        }
-
-        // Handle gallery images upload
-        if ( isset( $_FILES['relovit_gallery_images'] ) && ! empty( $_FILES['relovit_gallery_images']['name'][0] ) ) {
-            require_once( ABSPATH . 'wp-admin/includes/image.php' );
-            require_once( ABSPATH . 'wp-admin/includes/file.php' );
-            require_once( ABSPATH . 'wp-admin/includes/media.php' );
-
-            $files = $_FILES['relovit_gallery_images'];
-            $gallery_ids = $product->get_gallery_image_ids();
-
-            foreach ( $files['name'] as $key => $value ) {
-                if ( $files['name'][ $key ] ) {
-                    $file = [
-                        'name'     => $files['name'][ $key ],
-                        'type'     => $files['type'][ $key ],
-                        'tmp_name' => $files['tmp_name'][ $key ],
-                        'error'    => $files['error'][ $key ],
-                        'size'     => $files['size'][ $key ]
-                    ];
-
-                    $_FILES = [ 'relovit_gallery_image' => $file ];
-                    $attachment_id = media_handle_upload( 'relovit_gallery_image', $product_id );
-
-                    if ( ! is_wp_error( $attachment_id ) ) {
-                        $gallery_ids[] = $attachment_id;
-                    }
-                }
-            }
-            $product->set_gallery_image_ids( $gallery_ids );
-        }
-    }
 
     /**
      * Display the content for the "Relovit Settings" page.
@@ -416,44 +364,27 @@ class Frontend {
     public function enqueue_scripts() {
         global $post;
         if ( is_account_page() && is_wc_endpoint_url( 'relovit-products' ) ) {
-            if ( isset( $_GET['action'] ) && 'edit' === $_GET['action'] && ! empty( $_GET['product_id'] ) ) {
+            $action = get_query_var( 'action' );
+            $product_id = get_query_var( 'product_id' );
+
+            if ( $action === 'edit' && ! empty( $product_id ) ) {
                 // On the "Edit Product" sub-page
-                wp_enqueue_script(
-                    'relovit-edit-product',
-                    RELOVIT_PLUGIN_URL . 'assets/js/my-account-edit-product.js',
-                    [ 'jquery' ],
-                    RELOVIT_VERSION,
-                    true
-                );
-                wp_localize_script(
-                    'relovit-edit-product',
-                    'relovit_edit_product',
-                    [
-                        'api_url'            => esc_url_raw( rest_url( 'relovit/v1/enrich-product' ) ),
-                        'nonce'              => wp_create_nonce( 'wp_rest' ),
-                        'product_id'         => intval( $_GET['product_id'] ),
-                        'no_tasks_selected'  => __( 'Please select at least one AI task.', 'relovit' ),
-                        'error_message'      => __( 'An error occurred. Please try again.', 'relovit' ),
-                    ]
-                );
+                wp_enqueue_script( 'relovit-edit-product', RELOVIT_PLUGIN_URL . 'assets/js/my-account-edit-product.js', [ 'jquery' ], RELOVIT_VERSION, true );
+                wp_localize_script( 'relovit-edit-product', 'relovit_edit_product', [
+                    'api_url'           => esc_url_raw( rest_url( 'relovit/v1/enrich-product' ) ),
+                    'nonce'             => wp_create_nonce( 'wp_rest' ),
+                    'product_id'        => intval( $product_id ),
+                    'no_tasks_selected' => __( 'Please select at least one AI task.', 'relovit' ),
+                    'error_message'     => __( 'An error occurred. Please try again.', 'relovit' ),
+                ] );
             } else {
                 // On the main "My Products" list page
-                wp_enqueue_script(
-                    'relovit-my-products',
-                    RELOVIT_PLUGIN_URL . 'assets/js/my-products.js',
-                    [ 'jquery' ],
-                    RELOVIT_VERSION,
-                    true
-                );
-                wp_localize_script(
-                    'relovit-my-products',
-                    'relovit_my_products',
-                    [
-                        'delete_url'     => esc_url_raw( rest_url( 'relovit/v1/products/' ) ),
-                        'nonce'          => wp_create_nonce( 'wp_rest' ),
-                        'confirm_delete' => __( 'Are you sure you want to delete this product?', 'relovit' ),
-                    ]
-                );
+                wp_enqueue_script( 'relovit-my-products', RELOVIT_PLUGIN_URL . 'assets/js/my-products.js', [ 'jquery' ], RELOVIT_VERSION, true );
+                wp_localize_script( 'relovit-my-products', 'relovit_my_products', [
+                    'delete_url'     => esc_url_raw( rest_url( 'relovit/v1/products/' ) ),
+                    'nonce'          => wp_create_nonce( 'wp_rest' ),
+                    'confirm_delete' => __( 'Are you sure you want to delete this product?', 'relovit' ),
+                ] );
             }
         }
 

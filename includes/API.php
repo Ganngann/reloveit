@@ -290,6 +290,41 @@ class API {
         }
 
 
+        // Handle image uploads
+        if ( ! empty( $_FILES['relovit_main_image'] ) && ! empty( $_FILES['relovit_main_image']['name'] ) ) {
+            require_once( ABSPATH . 'wp-admin/includes/image.php' );
+            require_once( ABSPATH . 'wp-admin/includes/file.php' );
+            require_once( ABSPATH . 'wp-admin/includes/media.php' );
+            $attachment_id = media_handle_upload( 'relovit_main_image', $product_id );
+            if ( ! is_wp_error( $attachment_id ) ) {
+                $product->set_image_id( $attachment_id );
+            }
+        }
+        if ( ! empty( $_FILES['relovit_gallery_images'] ) && ! empty( $_FILES['relovit_gallery_images']['name'][0] ) ) {
+            require_once( ABSPATH . 'wp-admin/includes/image.php' );
+            require_once( ABSPATH . 'wp-admin/includes/file.php' );
+            require_once( ABSPATH . 'wp-admin/includes/media.php' );
+            $files = $_FILES['relovit_gallery_images'];
+            $gallery_ids = $product->get_gallery_image_ids();
+            foreach ( $files['name'] as $key => $value ) {
+                if ( $files['name'][ $key ] ) {
+                    $file = array(
+                        'name'     => $files['name'][ $key ],
+                        'type'     => $files['type'][ $key ],
+                        'tmp_name' => $files['tmp_name'][ $key ],
+                        'error'    => $files['error'][ $key ],
+                        'size'     => $files['size'][ $key ]
+                    );
+                    $_FILES = array( 'relovit_gallery_image' => $file );
+                    $attachment_id = media_handle_upload( 'relovit_gallery_image', $product_id );
+                    if ( ! is_wp_error( $attachment_id ) ) {
+                        $gallery_ids[] = $attachment_id;
+                    }
+                }
+            }
+            $product->set_gallery_image_ids( $gallery_ids );
+        }
+
         // Get all image paths associated with the product.
         $image_paths = [];
         $main_image_id = get_post_thumbnail_id( $product_id );

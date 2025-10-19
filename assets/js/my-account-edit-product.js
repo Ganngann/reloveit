@@ -17,8 +17,7 @@
 
             const form = $('#relovit-edit-product-form');
             const formData = new FormData(form[0]);
-            formData.append('relovit_tasks', tasks);
-            formData.append('product_id', relovit_edit_product.product_id);
+            formData.append('relovit_tasks', tasks.join(','));
 
             spinner.show();
             enrichBtn.prop('disabled', true);
