@@ -345,6 +345,11 @@ class Frontend {
             </p>
         </form>
 
+        <div id="relovit-debug-log" style="background-color: #f1f1f1; border: 1px solid #ccc; padding: 10px; margin-top: 20px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: scroll;">
+            <h4><?php esc_html_e( 'Debug Log', 'relovit' ); ?></h4>
+            <ul id="relovit-debug-list" style="list-style-type: none; margin: 0; padding: 0;"></ul>
+        </div>
+
         <?php
     }
 
