@@ -172,7 +172,7 @@ class Frontend {
 
         ?>
         <h3><?php printf( esc_html__( 'Edit Product: %s', 'relovit' ), $product->get_name() ); ?></h3>
-        <form method="post">
+        <form id="relovit-edit-product-form" method="post">
             <?php wp_nonce_field( 'relovit_edit_product' ); ?>
             <p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
                 <label for="relovit_product_title"><?php esc_html_e( 'Title', 'relovit' ); ?></label>
@@ -191,6 +191,31 @@ class Frontend {
                 <input type="hidden" name="relovit_product_id" value="<?php echo esc_attr( $product_id ); ?>">
             </p>
         </form>
+
+        <div id="relovit-ai-enrichment" style="margin-top: 30px; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+            <h3><?php esc_html_e( 'AI Enrichment', 'relovit' ); ?></h3>
+            <p><?php esc_html_e( 'Use AI to improve your product listing. Select the tasks you want to perform and click "Enrich with AI".', 'relovit' ); ?></p>
+            <div id="relovit-ai-tasks">
+                <p>
+                    <label><input type="checkbox" name="relovit_tasks[]" value="description"> <?php esc_html_e( 'Generate Description', 'relovit' ); ?></label>
+                </p>
+                <p>
+                    <label><input type="checkbox" name="relovit_tasks[]" value="price"> <?php esc_html_e( 'Suggest Price', 'relovit' ); ?></label>
+                </p>
+                <p>
+                    <label><input type="checkbox" name="relovit_tasks[]" value="category"> <?php esc_html_e( 'Suggest Category', 'relovit' ); ?></label>
+                </p>
+                <p>
+                    <label><input type="checkbox" name="relovit_tasks[]" value="image"> <?php esc_html_e( 'Generate a new main image', 'relovit' ); ?></label>
+                </p>
+            </div>
+            <p>
+                <button type="button" id="relovit-enrich-btn" class="woocommerce-Button button"><?php esc_html_e( 'Enrich with AI', 'relovit' ); ?></button>
+            </p>
+            <div id="relovit-ai-spinner" style="display: none;">
+                <p><?php esc_html_e( 'AI is working, please wait...', 'relovit' ); ?></p>
+            </div>
+        </div>
         <?php
     }
 
@@ -300,46 +325,66 @@ class Frontend {
      */
     public function enqueue_scripts() {
         global $post;
-        if ( ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'relovit_upload_form' ) ) || is_account_page() ) {
-            if ( is_account_page() && is_wc_endpoint_url( 'relovit-products' ) ) {
+        if ( is_account_page() && is_wc_endpoint_url( 'relovit-products' ) ) {
+            // On the main "My Products" list page
+            wp_enqueue_script(
+                'relovit-my-products',
+                RELOVIT_PLUGIN_URL . 'assets/js/my-products.js',
+                [ 'jquery' ],
+                RELOVIT_VERSION,
+                true
+            );
+            wp_localize_script(
+                'relovit-my-products',
+                'relovit_my_products',
+                [
+                    'delete_url'     => esc_url_raw( rest_url( 'relovit/v1/products/' ) ),
+                    'nonce'          => wp_create_nonce( 'wp_rest' ),
+                    'confirm_delete' => __( 'Are you sure you want to delete this product?', 'relovit' ),
+                ]
+            );
+
+            // On the "Edit Product" sub-page
+            if ( isset( $_GET['action'] ) && 'edit' === $_GET['action'] && ! empty( $_GET['product_id'] ) ) {
                 wp_enqueue_script(
-                    'relovit-my-products',
-                    RELOVIT_PLUGIN_URL . 'assets/js/my-products.js',
+                    'relovit-edit-product',
+                    RELOVIT_PLUGIN_URL . 'assets/js/my-account-edit-product.js',
                     [ 'jquery' ],
                     RELOVIT_VERSION,
                     true
                 );
-
                 wp_localize_script(
-                    'relovit-my-products',
-                    'relovit_my_products',
+                    'relovit-edit-product',
+                    'relovit_edit_product',
                     [
-                        'delete_url'      => esc_url_raw( rest_url( 'relovit/v1/products/(?P<id>\d+)' ) ),
-                        'nonce'           => wp_create_nonce( 'wp_rest' ),
-                        'confirm_delete'  => __( 'Are you sure you want to delete this product?', 'relovit' ),
+                        'ajax_url'           => admin_url( 'admin-ajax.php' ),
+                        'api_url'            => esc_url_raw( rest_url( 'relovit/v1/enrich-product' ) ),
+                        'nonce'              => wp_create_nonce( 'wp_rest' ),
+                        'product_id'         => intval( $_GET['product_id'] ),
+                        'no_tasks_selected'  => __( 'Please select at least one AI task.', 'relovit' ),
+                        'error_message'      => __( 'An error occurred. Please try again.', 'relovit' ),
                     ]
                 );
             }
+        }
 
-            if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'relovit_upload_form' ) ) {
-                wp_enqueue_script(
-                    'relovit-upload-form',
-                    RELOVIT_PLUGIN_URL . 'assets/js/upload-form.js',
-                    [ 'jquery' ],
-                    RELOVIT_VERSION,
-                    true
-                );
-
-                wp_localize_script(
-                    'relovit-upload-form',
-                    'relovit_ajax',
-                    [
-                        'identify_url' => rest_url( 'relovit/v1/identify-objects' ),
-                        'create_url'   => rest_url( 'relovit/v1/create-products' ),
-                        'nonce'        => wp_create_nonce( 'wp_rest' ),
-                    ]
-                );
-            }
+        if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'relovit_upload_form' ) ) {
+            wp_enqueue_script(
+                'relovit-upload-form',
+                RELOVIT_PLUGIN_URL . 'assets/js/upload-form.js',
+                [ 'jquery' ],
+                RELOVIT_VERSION,
+                true
+            );
+            wp_localize_script(
+                'relovit-upload-form',
+                'relovit_ajax',
+                [
+                    'identify_url' => rest_url( 'relovit/v1/identify-objects' ),
+                    'create_url'   => rest_url( 'relovit/v1/create-products' ),
+                    'nonce'        => wp_create_nonce( 'wp_rest' ),
+                ]
+            );
         }
     }
 }
