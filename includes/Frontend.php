@@ -30,6 +30,9 @@ class Frontend {
         add_action( 'woocommerce_account_relovit-products_endpoint', [ $this, 'relovit_products_content' ] );
         add_action( 'template_redirect', [ $this, 'relovit_save_settings' ] );
         add_action( 'template_redirect', [ $this, 'relovit_save_product' ] );
+
+        // Marketplace hooks.
+        add_action( 'woocommerce_checkout_create_order', [ $this, 'assign_seller_to_order' ], 10, 2 );
     }
 
     /**
@@ -97,6 +100,36 @@ class Frontend {
         wc_add_notice( __( 'Product saved successfully.', 'relovit' ), 'success' );
         wp_redirect( add_query_arg( [ 'action' => 'edit', 'product_id' => $product->get_id() ], wc_get_account_endpoint_url( 'relovit-products' ) ) );
         exit;
+    }
+
+    /**
+     * Assigns the seller to the order based on the first product in the cart.
+     *
+     * @param \WC_Order $order The order object.
+     * @param array     $data  The posted checkout data.
+     */
+    public function assign_seller_to_order( $order, $data ) {
+        $items = $order->get_items();
+
+        if ( empty( $items ) ) {
+            return;
+        }
+
+        // Get the first item from the order.
+        $first_item = reset( $items );
+        $product_id = $first_item->get_product_id();
+
+        if ( ! $product_id ) {
+            return;
+        }
+
+        // Get the author of the product.
+        $seller_id = get_post_field( 'post_author', $product_id );
+
+        if ( $seller_id ) {
+            // Store the seller ID as order meta.
+            $order->update_meta_data( '_seller_id', $seller_id );
+        }
     }
 
     /**
@@ -256,25 +289,20 @@ class Frontend {
 
         $sql = "
             SELECT
-                SUM(order_item_meta.meta_value) as total_revenue,
-                COUNT(DISTINCT p.ID) as order_count
+                SUM(pm.meta_value) as total_revenue,
+                COUNT(p.ID) as order_count
             FROM
                 {$wpdb->posts} as p
             INNER JOIN
-                {$wpdb->prefix}woocommerce_order_items as order_items ON p.ID = order_items.order_id
+                {$wpdb->postmeta} as pm ON p.ID = pm.post_id
             INNER JOIN
-                {$wpdb->prefix}woocommerce_order_itemmeta as order_item_meta ON order_items.order_item_id = order_item_meta.order_item_id
-            INNER JOIN
-                {$wpdb->prefix}woocommerce_order_itemmeta as order_item_meta2 ON order_items.order_item_id = order_item_meta2.order_item_id
-            INNER JOIN
-                {$wpdb->posts} as products ON order_item_meta2.meta_value = products.ID
+                {$wpdb->postmeta} as pm2 ON p.ID = pm2.post_id
             WHERE
                 p.post_type = 'shop_order'
                 AND p.post_status IN ('wc-completed', 'wc-processing')
-                AND order_items.order_item_type = 'line_item'
-                AND order_item_meta.meta_key = '_line_total'
-                AND order_item_meta2.meta_key = '_product_id'
-                AND products.post_author = %d
+                AND pm.meta_key = '_order_total'
+                AND pm2.meta_key = '_seller_id'
+                AND pm2.meta_value = %d
         ";
 
         $results = $wpdb->get_row( $wpdb->prepare( $sql, $user_id ) );
