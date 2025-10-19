@@ -24,6 +24,21 @@ class API {
     }
 
     /**
+     * Check if the user has the required permissions for creating products.
+     *
+     * @return bool|\WP_Error
+     */
+    public function check_creation_permissions() {
+        if ( ! current_user_can( 'upload_files' ) ) {
+            return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to upload files.', 'relovit' ), [ 'status' => 403 ] );
+        }
+        if ( ! current_user_can( 'edit_products' ) ) {
+            return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to create products.', 'relovit' ), [ 'status' => 403 ] );
+        }
+        return true;
+    }
+
+    /**
      * Register the routes for the objects of the controller.
      */
     public function register_routes() {
@@ -33,7 +48,7 @@ class API {
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [ $this, 'identify_objects' ],
-                'permission_callback' => [ $this, 'check_permissions' ],
+                'permission_callback' => [ $this, 'check_creation_permissions' ],
             ]
         );
 
@@ -43,7 +58,7 @@ class API {
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [ $this, 'create_products' ],
-                'permission_callback' => [ $this, 'check_permissions' ],
+                'permission_callback' => [ $this, 'check_creation_permissions' ],
             ]
         );
 
@@ -53,7 +68,24 @@ class API {
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [ $this, 'enrich_product' ],
-                'permission_callback' => [ $this, 'check_permissions' ],
+                'permission_callback' => [ $this, 'check_enrich_permission' ],
+            ]
+        );
+
+        register_rest_route(
+            'relovit/v1',
+            '/products/(?P<id>\d+)',
+            [
+                'methods'             => \WP_REST_Server::DELETABLE,
+                'callback'            => [ $this, 'delete_product' ],
+                'permission_callback' => [ $this, 'check_product_permission' ],
+                'args'                => [
+                    'id' => [
+                        'validate_callback' => function( $param, $request, $key ) {
+                            return is_numeric( $param );
+                        }
+                    ],
+                ],
             ]
         );
     }
@@ -159,97 +191,152 @@ class API {
     }
 
     /**
-     * Check if the user has the required permissions.
+     * Check if the user has the required permissions for a product.
      *
+     * @param \WP_REST_Request $request
      * @return bool|\WP_Error
      */
-    public function check_permissions() {
-        if ( ! current_user_can( 'upload_files' ) ) {
-            return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to upload files.', 'relovit' ), [ 'status' => 403 ] );
+    public function check_product_permission( $request ) {
+        if ( ! is_user_logged_in() ) {
+            return new \WP_Error( 'rest_not_logged_in', __( 'You are not currently logged in.', 'relovit' ), [ 'status' => 401 ] );
         }
-        if ( ! current_user_can( 'edit_products' ) ) {
-            return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to create products.', 'relovit' ), [ 'status' => 403 ] );
+
+        $product_id = $request->get_param( 'id' );
+
+        if ( ! $product_id ) {
+            return new \WP_Error( 'rest_product_invalid_id', __( 'Invalid product ID.', 'relovit' ), [ 'status' => 404 ] );
         }
+
+        $product = get_post( $product_id );
+        if ( ! $product || 'product' !== $product->post_type ) {
+            return new \WP_Error( 'rest_product_invalid_id', __( 'Invalid product ID.', 'relovit' ), [ 'status' => 404 ] );
+        }
+
+        if ( get_current_user_id() != $product->post_author ) {
+            return new \WP_Error( 'rest_forbidden_context', __( 'Sorry, you are not allowed to access this product.', 'relovit' ), [ 'status' => 403 ] );
+        }
+
         return true;
     }
 
     /**
-     * Enrich a product with AI-generated content.
+     * Check if the user has the required permissions for enriching a product.
+     *
+     * @param \WP_REST_Request $request
+     * @return bool|\WP_Error
+     */
+    public function check_enrich_permission( $request ) {
+        // The default REST API server will have already handled nonce verification.
+        // We only need to check for user login and product ownership.
+        if ( ! is_user_logged_in() ) {
+            return new \WP_Error( 'rest_not_logged_in', __( 'You are not currently logged in.', 'relovit' ), [ 'status' => 401 ] );
+        }
+
+        $product_id = $request->get_param('relovit_product_id');
+
+        if ( ! $product_id ) {
+            return new \WP_Error( 'rest_product_invalid_id', __( 'Invalid product ID.', 'relovit' ), [ 'status' => 404 ] );
+        }
+
+        $product = get_post( $product_id );
+        if ( ! $product || 'product' !== $product->post_type ) {
+            return new \WP_Error( 'rest_product_invalid_id', __( 'Invalid product ID.', 'relovit' ), [ 'status' => 404 ] );
+        }
+
+        if ( get_current_user_id() != $product->post_author ) {
+            return new \WP_Error( 'rest_forbidden_context', __( 'Sorry, you are not allowed to access this product.', 'relovit' ), [ 'status' => 403 ] );
+        }
+
+        return true;
+    }
+
+     /**
+     * Delete a product.
      *
      * @param \WP_REST_Request $request Full data about the request.
      * @return \WP_REST_Response|\WP_Error
      */
+    public function delete_product( $request ) {
+        $product_id = $request->get_param( 'id' );
+        $product    = wc_get_product( $product_id );
+
+        if ( ! $product ) {
+            return new \WP_Error( 'product_not_found', 'The specified product could not be found.', [ 'status' => 404 ] );
+        }
+
+        // Use 'true' to bypass trash and permanently delete.
+        $result = wp_delete_post( $product_id, true );
+
+        if ( ! $result ) {
+            return new \WP_Error( 'delete_failed', 'Could not delete the product.', [ 'status' => 500 ] );
+        }
+
+        return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => 'Product deleted successfully.' ] ], 200 );
+    }
+
     public function enrich_product( $request ) {
-        $product_id = $request->get_param( 'product_id' );
-        $files      = $request->get_file_params();
+        $product_id = $request->get_param( 'relovit_product_id' );
+        $tasks      = $request->get_param( 'relovit_tasks' );
 
         if ( empty( $product_id ) ) {
             return new \WP_Error( 'no_product_id', 'No product ID was provided.', [ 'status' => 400 ] );
         }
 
-        $tasks = $request->get_param( 'relovit_tasks' ) ?: [];
-        if ( empty( $tasks ) ) {
+        if ( empty( $tasks ) || ! is_array( $tasks ) ) {
             return new \WP_Error( 'no_tasks', 'Please select at least one task to perform.', [ 'status' => 400 ] );
         }
 
-        // Handle file uploads.
-        require_once ABSPATH . 'wp-admin/includes/image.php';
-        require_once ABSPATH . 'wp-admin/includes/file.php';
-        require_once ABSPATH . 'wp-admin/includes/media.php';
+        $product = wc_get_product( $product_id );
+        if ( ! $product ) {
+            return new \WP_Error( 'product_not_found', 'The specified product could not be found.', [ 'status' => 404 ] );
+        }
 
-        $attachment_ids = [];
-        $image_paths    = [];
+        $files = $request->get_file_params();
 
-        $attachment_ids = [];
-        $image_paths    = [];
+        // It's better to handle file uploads before other updates.
+        require_once( ABSPATH . 'wp-admin/includes/image.php' );
+        require_once( ABSPATH . 'wp-admin/includes/file.php' );
+        require_once( ABSPATH . 'wp-admin/includes/media.php' );
 
-        if ( ! empty( $files['relovit_images'] ) ) {
-            $upload_overrides = [ 'test_form' => false ];
-
-            foreach ( $files['relovit_images']['tmp_name'] as $key => $tmp_name ) {
-                if ( empty( $tmp_name ) ) {
-                    continue;
-                }
-                $uploaded_file = [
-                    'name'     => $files['relovit_images']['name'][ $key ],
-                    'type'     => $files['relovit_images']['type'][ $key ],
-                    'tmp_name' => $tmp_name,
-                    'error'    => $files['relovit_images']['error'][ $key ],
-                    'size'     => $files['relovit_images']['size'][ $key ],
-                ];
-
-                $movefile = wp_handle_upload( $uploaded_file, $upload_overrides );
-
-                if ( $movefile && ! isset( $movefile['error'] ) ) {
-                    $attachment = [
-                        'guid'           => $movefile['url'],
-                        'post_mime_type' => $movefile['type'],
-                        'post_title'     => preg_replace( '/\.[^.]+$/', '', basename( $movefile['file'] ) ),
-                        'post_content'   => '',
-                        'post_status'    => 'inherit',
-                    ];
-
-                    $attachment_id = wp_insert_attachment( $attachment, $movefile['file'], $product_id );
-                    require_once ABSPATH . 'wp-admin/includes/image.php';
-                    $attachment_data = wp_generate_attachment_metadata( $attachment_id, $movefile['file'] );
-                    wp_update_attachment_metadata( $attachment_id, $attachment_data );
-
-                    $attachment_ids[] = $attachment_id;
-                    $image_paths[]    = $movefile['file'];
-                } else {
-                    return new \WP_Error( 'upload_error', $movefile['error'], [ 'status' => 500 ] );
-                }
+        if ( isset( $files['relovit_main_image'] ) ) {
+            // The file is in a temp location, use media_handle_sideload
+            $file_array = [
+                'name' => $files['relovit_main_image']['name'],
+                'tmp_name' => $files['relovit_main_image']['tmp_name']
+            ];
+            $attachment_id = media_handle_sideload( $file_array, $product_id );
+            if ( ! is_wp_error( $attachment_id ) ) {
+                $product->set_image_id( $attachment_id );
             }
         }
 
-        // Get the main product image as well.
+        if ( isset( $files['relovit_gallery_images'] ) ) {
+            $gallery_ids = $product->get_gallery_image_ids();
+            // This handles both single and multiple file uploads for the gallery
+            $gallery_files = $this->format_file_array($files['relovit_gallery_images']);
+
+            foreach ( $gallery_files as $file ) {
+                 $file_array = [
+                    'name' => $file['name'],
+                    'tmp_name' => $file['tmp_name']
+                ];
+                $attachment_id = media_handle_sideload( $file_array, $product_id );
+                if ( ! is_wp_error( $attachment_id ) ) {
+                    $gallery_ids[] = $attachment_id;
+                }
+            }
+            $product->set_gallery_image_ids( $gallery_ids );
+        }
+
+        // Save product after image changes to make them available for AI
+        $product->save();
+
+        // Get all image paths associated with the product.
+        $image_paths = [];
         $main_image_id = get_post_thumbnail_id( $product_id );
         if ( $main_image_id ) {
             $image_paths[] = get_attached_file( $main_image_id );
         }
-
-        // Get gallery images.
-        $product = wc_get_product( $product_id );
         $gallery_image_ids = $product->get_gallery_image_ids();
         foreach ( $gallery_image_ids as $gallery_image_id ) {
             $image_paths[] = get_attached_file( $gallery_image_id );
@@ -260,93 +347,65 @@ class API {
             return new \WP_Error( 'no_images_found', 'No images found for this product. Please upload at least one.', [ 'status' => 400 ] );
         }
 
-        if ( ! $product ) {
-            return new \WP_Error( 'product_not_found', 'The specified product could not be found.', [ 'status' => 404 ] );
-        }
-
         $product_name = $product->get_name();
         $gemini_api   = new Gemini_API();
 
-        $tasks = $request->get_param( 'relovit_tasks' ) ?: [];
-
         if ( in_array( 'description', $tasks, true ) ) {
             $description = $gemini_api->generate_description( $product_name, $image_paths );
-            if ( is_wp_error( $description ) ) {
-                return $description;
+            if ( ! is_wp_error( $description ) ) {
+                $product->set_description( $description );
             }
-            $product->set_description( $description );
         }
 
         if ( in_array( 'price', $tasks, true ) ) {
             $user_id = get_current_user_id();
             $price_range = get_user_meta( $user_id, 'relovit_price_range', true );
             $price = $gemini_api->generate_price( $product_name, $image_paths, $price_range ?: 'Moyen' );
-            if ( is_wp_error( $price ) ) {
-                return $price;
+            if ( ! is_wp_error( $price ) ) {
+                $product->set_regular_price( floatval( $price ) );
             }
-            $product->set_regular_price( floatval( $price ) );
         }
 
         if ( in_array( 'category', $tasks, true ) ) {
             $taxonomy_terms = $gemini_api->generate_taxonomy_terms( $product_name, $image_paths );
             if ( ! is_wp_error( $taxonomy_terms ) && ! empty( $taxonomy_terms ) ) {
-                // Handle hierarchical categories.
                 if ( ! empty( $taxonomy_terms['category'] ) ) {
                     $category_id = $this->find_or_create_term_path( $taxonomy_terms['category'], 'product_cat' );
                     if ( $category_id ) {
                         $product->set_category_ids( [ $category_id ] );
                     }
                 }
-
-                // Handle tags.
                 if ( ! empty( $taxonomy_terms['tags'] ) ) {
                     wp_set_post_terms( $product_id, $taxonomy_terms['tags'], 'product_tag', false );
                 }
             }
         }
 
-        if ( in_array( 'image', $tasks, true ) && ! empty( $image_paths ) ) {
+        if ( in_array( 'image', $tasks, true ) ) {
             $generated_image_data = $gemini_api->generate_image( $image_paths[0] );
-
-            if ( is_wp_error( $generated_image_data ) ) {
-                return $generated_image_data;
+            if ( ! is_wp_error( $generated_image_data ) ) {
+                $upload = wp_upload_bits( 'generated-image.png', null, base64_decode( $generated_image_data ) );
+                if ( empty( $upload['error'] ) ) {
+                    $attachment = [
+                        'post_mime_type' => 'image/png',
+                        'post_title'     => $product_name . ' - AI Generated',
+                        'post_content'   => '',
+                        'post_status'    => 'inherit',
+                    ];
+                    $new_attachment_id = wp_insert_attachment( $attachment, $upload['file'], $product_id );
+                    if ( ! is_wp_error( $new_attachment_id ) ) {
+                        require_once ABSPATH . 'wp-admin/includes/image.php';
+                        $attachment_data = wp_generate_attachment_metadata( $new_attachment_id, $upload['file'] );
+                        wp_update_attachment_metadata( $new_attachment_id, $attachment_data );
+                        $product->set_image_id( $new_attachment_id );
+                    }
+                }
             }
-
-            // Upload the generated image from base64 data.
-            $upload = wp_upload_bits( 'generated-image.png', null, base64_decode( $generated_image_data ) );
-            if ( ! empty( $upload['error'] ) ) {
-                return new \WP_Error( 'image_gen_upload_failed', $upload['error'], [ 'status' => 500 ] );
-            }
-
-            $attachment = [
-                'post_mime_type' => 'image/png',
-                'post_title'     => $product_name . ' - AI Generated',
-                'post_content'   => '',
-                'post_status'    => 'inherit',
-            ];
-            $new_attachment_id = wp_insert_attachment( $attachment, $upload['file'], $product_id );
-            if ( is_wp_error( $new_attachment_id ) ) {
-                return $new_attachment_id;
-            }
-
-            require_once ABSPATH . 'wp-admin/includes/image.php';
-            $attachment_data = wp_generate_attachment_metadata( $new_attachment_id, $upload['file'] );
-            wp_update_attachment_metadata( $new_attachment_id, $attachment_data );
-            $product->set_image_id( $new_attachment_id );
         }
 
-        // Update the product.
-        $existing_gallery_ids = $product->get_gallery_image_ids();
-        $new_gallery_ids      = array_unique( array_merge( $existing_gallery_ids, $attachment_ids ) );
-        $product->set_gallery_image_ids( $new_gallery_ids );
         $product->set_status( 'pending' );
-        $result = $product->save();
+        $product->save();
 
-        if ( is_wp_error( $result ) || $result === 0 ) {
-            return new \WP_Error( 'product_save_failed', __( 'Could not save the product after enrichment.', 'relovit' ), [ 'status' => 500 ] );
-        }
-
-        // Get the names of the tags to return them in the response.
         $tag_terms = wp_get_post_terms( $product->get_id(), 'product_tag', [ 'fields' => 'names' ] );
 
         $product_data = [
@@ -355,20 +414,52 @@ class API {
             'price'       => $product->get_regular_price(),
             'category_id' => $product->get_category_ids()[0] ?? null,
             'image_id'    => $product->get_image_id(),
-            'gallery_ids' => $product->get_gallery_image_ids(),
             'tags'        => $tag_terms,
+            'message'     => __( 'Product enriched successfully! The page will now be updated.', 'relovit' ),
         ];
 
         return new \WP_REST_Response(
             [
                 'success' => true,
-                'data'    => [
-                    'message' => __( 'Product enriched successfully!', 'relovit' ),
-                    'product' => $product_data,
-                ],
+                'data'    => $product_data,
             ],
             200
         );
+    }
+
+    /**
+     * Reformats the `$_FILES` array from the REST API into a more usable format.
+     *
+     * The WordPress REST API formats the `$_FILES` array differently depending on
+     * whether one or multiple files are uploaded. This function normalizes the
+     * array so it can always be iterated over.
+     *
+     * @param array $file_data The raw file data from `$request->get_file_params()`.
+     * @return array A numerically indexed array of file arrays.
+     */
+    private function format_file_array($file_data) {
+        if ( empty($file_data) ) {
+            return [];
+        }
+
+        $formatted_files = [];
+        if ( is_array($file_data['name']) ) {
+            // Multiple files uploaded
+            foreach ( $file_data['name'] as $key => $name ) {
+                $formatted_files[] = [
+                    'name'     => $name,
+                    'type'     => $file_data['type'][$key],
+                    'tmp_name' => $file_data['tmp_name'][$key],
+                    'error'    => $file_data['error'][$key],
+                    'size'     => $file_data['size'][$key],
+                ];
+            }
+        } else {
+            // Single file uploaded
+            $formatted_files[] = $file_data;
+        }
+
+        return $formatted_files;
     }
 
     /**
