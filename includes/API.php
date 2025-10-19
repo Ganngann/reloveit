@@ -226,10 +226,9 @@ class API {
      * @return bool|\WP_Error
      */
     public function check_enrich_permission( $request ) {
-        // Use check_ajax_referer for explicit nonce verification from form data.
-        // The function will die with a 403 response if the nonce is invalid.
-        if ( ! check_ajax_referer( 'relovit_enrich_nonce', 'relovit_nonce', false ) ) {
-             return new \WP_Error( 'rest_nonce_invalid', __( 'Nonce is invalid.', 'relovit' ), [ 'status' => 403 ] );
+        $nonce = $request->get_param('relovit_nonce');
+        if ( ! wp_verify_nonce( $nonce, 'relovit_enrich_nonce' ) ) {
+            return new \WP_Error( 'rest_nonce_invalid', __( 'Manual nonce verification failed.', 'relovit' ), [ 'status' => 403 ] );
         }
 
         // The product ID is sent as 'relovit_product_id' in the FormData.

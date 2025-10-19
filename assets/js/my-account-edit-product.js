@@ -18,7 +18,7 @@
     }
 
     try {
-        log('Script file my-account-edit-product.js loaded.');
+        log(`Script file my-account-edit-product.js loaded. Version: ${relovit_edit_product.version}`);
 
         $(function () {
             log('Document ready. Initializing...');

@@ -197,6 +197,7 @@ class Frontend {
                 'product_id'        => $product_id,
                 'no_tasks_selected' => __( 'Please select at least one AI task.', 'relovit' ),
                 'error_message'     => __( 'An error occurred. Please try again.', 'relovit' ),
+                'version'           => RELOVIT_VERSION,
             ] );
 
             $this->relovit_render_edit_product_form();
