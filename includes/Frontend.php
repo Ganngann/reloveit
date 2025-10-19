@@ -18,7 +18,7 @@ class Frontend {
      * Frontend constructor.
      */
     public function __construct() {
-        add_action( 'wp', [ $this, 'enqueue_scripts' ] );
+        add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
         add_action( 'init', [ $this, 'register_shortcodes' ] );
 
         // WooCommerce hooks for "My Account" page.
@@ -29,6 +29,73 @@ class Frontend {
         add_action( 'woocommerce_account_relovit-products_endpoint', [ $this, 'relovit_products_content' ] );
         add_action( 'template_redirect', [ $this, 'relovit_save_settings' ] );
         add_action( 'template_redirect', [ $this, 'relovit_save_product' ] );
+    }
+
+    /**
+     * Save the product from the "Relovit Edit Product" page.
+     */
+    public function relovit_save_product() {
+        if ( ! isset( $_POST['relovit_save_product'] ) || ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( $_POST['_wpnonce'], 'relovit_edit_product' ) ) {
+            return;
+        }
+
+        $product_id = isset( $_POST['relovit_product_id'] ) ? intval( $_POST['relovit_product_id'] ) : 0;
+        $product = wc_get_product( $product_id );
+
+        if ( ! $product || get_post_field( 'post_author', $product->get_id() ) != get_current_user_id() ) {
+            wc_add_notice( __( 'Invalid product.', 'relovit' ), 'error' );
+            return;
+        }
+
+        $title = isset( $_POST['relovit_product_title'] ) ? sanitize_text_field( $_POST['relovit_product_title'] ) : '';
+        $description = isset( $_POST['relovit_product_description'] ) ? wp_kses_post( $_POST['relovit_product_description'] ) : '';
+        $price = isset( $_POST['relovit_product_price'] ) ? wc_format_decimal( $_POST['relovit_product_price'] ) : '';
+
+        $product->set_name( $title );
+        $product->set_description( $description );
+        $product->set_regular_price( $price );
+
+        // Handle file uploads
+        if ( ! function_exists( 'media_handle_upload' ) ) {
+            require_once( ABSPATH . 'wp-admin/includes/image.php' );
+            require_once( ABSPATH . 'wp-admin/includes/file.php' );
+            require_once( ABSPATH . 'wp-admin/includes/media.php' );
+        }
+
+        if ( isset( $_FILES['relovit_main_image'] ) && $_FILES['relovit_main_image']['size'] > 0 ) {
+            $attachment_id = media_handle_upload( 'relovit_main_image', $product_id );
+            if ( ! is_wp_error( $attachment_id ) ) {
+                $product->set_image_id( $attachment_id );
+            }
+        }
+
+        if ( isset( $_FILES['relovit_gallery_images'] ) && ! empty( $_FILES['relovit_gallery_images']['name'][0] ) ) {
+            $files = $_FILES['relovit_gallery_images'];
+            $gallery_ids = $product->get_gallery_image_ids();
+
+            foreach ( $files['name'] as $key => $value ) {
+                if ( $files['name'][$key] ) {
+                    $_FILES['single_gallery_image'] = [
+                        'name'     => $files['name'][$key],
+                        'type'     => $files['type'][$key],
+                        'tmp_name' => $files['tmp_name'][$key],
+                        'error'    => $files['error'][$key],
+                        'size'     => $files['size'][$key]
+                    ];
+                    $attachment_id = media_handle_upload( 'single_gallery_image', $product_id );
+                    if ( ! is_wp_error( $attachment_id ) ) {
+                        $gallery_ids[] = $attachment_id;
+                    }
+                }
+            }
+            $product->set_gallery_image_ids( $gallery_ids );
+        }
+
+        $product->save();
+
+        wc_add_notice( __( 'Product saved successfully.', 'relovit' ), 'success' );
+        wp_redirect( add_query_arg( [ 'action' => 'edit', 'product_id' => $product->get_id() ], wc_get_account_endpoint_url( 'relovit-products' ) ) );
+        exit;
     }
 
     /**
@@ -61,9 +128,23 @@ class Frontend {
      * @return array
      */
     public function relovit_account_menu_items( $items ) {
-        $items['relovit-products'] = __( 'My Products', 'relovit' );
-        $items['relovit-settings'] = __( 'Relovit Settings', 'relovit' );
-        return $items;
+        // Add 'My Products' before 'Relovit Settings'
+        $new_items = [];
+        foreach ($items as $key => $value) {
+            if ($key === 'relovit-settings') {
+                $new_items['relovit-products'] = __( 'My Products', 'relovit' );
+            }
+            $new_items[$key] = $value;
+        }
+        // If 'relovit-settings' was not found, add it at the end.
+        if (!isset($new_items['relovit-settings'])) {
+             $new_items['relovit-settings'] = __( 'Relovit Settings', 'relovit' );
+        }
+        if (!isset($new_items['relovit-products'])) {
+             $new_items['relovit-products'] = __( 'My Products', 'relovit' );
+        }
+
+        return $new_items;
     }
 
     /**
@@ -89,106 +170,11 @@ class Frontend {
     }
 
     /**
-     * Save the product from the "Relovit Edit Product" page.
-     */
-    public function relovit_save_product() {
-        if ( ! isset( $_POST['relovit_save_product'] ) || ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( $_POST['_wpnonce'], 'relovit_edit_product' ) ) {
-            return;
-        }
-
-        $product_id = isset( $_POST['relovit_product_id'] ) ? intval( $_POST['relovit_product_id'] ) : 0;
-        $product = wc_get_product( $product_id );
-
-        // Security check: Ensure the product exists and belongs to the current user.
-        if ( ! $product || get_post_field( 'post_author', $product->get_id() ) != get_current_user_id() ) {
-            wc_add_notice( __( 'Invalid product.', 'relovit' ), 'error' );
-            return;
-        }
-
-        $title = isset( $_POST['relovit_product_title'] ) ? sanitize_text_field( $_POST['relovit_product_title'] ) : '';
-        $description = isset( $_POST['relovit_product_description'] ) ? wp_kses_post( $_POST['relovit_product_description'] ) : '';
-        $price = isset( $_POST['relovit_product_price'] ) ? wc_format_decimal( $_POST['relovit_product_price'] ) : '';
-
-        $product->set_name( $title );
-        $product->set_description( $description );
-        $product->set_regular_price( $price );
-
-        // Handle file uploads (main image and gallery)
-        require_once( ABSPATH . 'wp-admin/includes/image.php' );
-        require_once( ABSPATH . 'wp-admin/includes/file.php' );
-        require_once( ABSPATH . 'wp-admin/includes/media.php' );
-
-        // Set main image
-        if ( isset( $_FILES['relovit_main_image'] ) && $_FILES['relovit_main_image']['size'] > 0 ) {
-            $attachment_id = media_handle_upload( 'relovit_main_image', $product_id );
-            if ( ! is_wp_error( $attachment_id ) ) {
-                $product->set_image_id( $attachment_id );
-            }
-        }
-
-        // Add gallery images
-        if ( isset( $_FILES['relovit_gallery_images'] ) && ! empty( $_FILES['relovit_gallery_images']['name'][0] ) ) {
-            $files = $_FILES['relovit_gallery_images'];
-            $gallery_ids = $product->get_gallery_image_ids();
-
-            foreach ( $files['name'] as $key => $value ) {
-                if ( $files['name'][$key] ) {
-                    $_FILES['single_gallery_image'] = [
-                        'name'     => $files['name'][$key],
-                        'type'     => $files['type'][$key],
-                        'tmp_name' => $files['tmp_name'][$key],
-                        'error'    => $files['error'][$key],
-                        'size'     => $files['size'][$key]
-                    ];
-                    $attachment_id = media_handle_upload( 'single_gallery_image', $product_id );
-                    if ( ! is_wp_error( $attachment_id ) ) {
-                        $gallery_ids[] = $attachment_id;
-                    }
-                }
-            }
-            $product->set_gallery_image_ids( $gallery_ids );
-        }
-
-        $product->save();
-
-        wc_add_notice( __( 'Product saved successfully.', 'relovit' ), 'success' );
-        wp_redirect( add_query_arg( [ 'action' => 'edit', 'product_id' => $product->get_id() ], wc_get_account_endpoint_url( 'relovit-products' ) ) );
-        exit;
-    }
-
-
-    /**
-     * Display the content for the "Relovit Settings" page.
-     */
-    public function relovit_settings_content() {
-        wc_print_notices();
-        $user_id = get_current_user_id();
-        $current_price_range = get_user_meta( $user_id, 'relovit_price_range', true );
-        ?>
-        <h3><?php esc_html_e( 'Relovit Settings', 'relovit' ); ?></h3>
-        <form method="post">
-            <?php wp_nonce_field( 'relovit_save_settings' ); ?>
-            <p>
-                <label for="relovit_price_range"><?php esc_html_e( 'Default Price Range', 'relovit' ); ?></label>
-                <select id="relovit_price_range" name="relovit_price_range" class="woocommerce-Input woocommerce-Input--select">
-                    <option value="Bon marché" <?php selected( $current_price_range, 'Bon marché' ); ?>><?php esc_html_e( 'Inexpensive', 'relovit' ); ?></option>
-                    <option value="Moyen" <?php selected( $current_price_range, 'Moyen' ); ?>><?php esc_html_e( 'Average', 'relovit' ); ?></option>
-                    <option value="Cher" <?php selected( $current_price_range, 'Cher' ); ?>><?php esc_html_e( 'Expensive', 'relovit' ); ?></option>
-                </select>
-            </p>
-            <p>
-                <button type="submit" class="woocommerce-Button button" name="relovit_save_settings" value="<?php esc_attr_e( 'Save changes', 'relovit' ); ?>"><?php esc_html_e( 'Save changes', 'relovit' ); ?></button>
-            </p>
-        </form>
-        <?php
-    }
-
-    /**
      * Display the content for the "Relovit Products" page.
      */
     public function relovit_products_content() {
         if ( isset( $_GET['action'] ) && 'edit' === $_GET['action'] && ! empty( $_GET['product_id'] ) ) {
-            // Enqueue the script right before rendering the form that needs it.
+            // Enqueue the script for the edit page.
             $product_id = intval( $_GET['product_id'] );
             wp_enqueue_script( 'relovit-edit-product', RELOVIT_PLUGIN_URL . 'assets/js/my-account-edit-product.js', [ 'jquery' ], RELOVIT_VERSION, true );
             wp_localize_script( 'relovit-edit-product', 'relovit_edit_product', [
@@ -197,11 +183,18 @@ class Frontend {
                 'product_id'        => $product_id,
                 'no_tasks_selected' => __( 'Please select at least one AI task.', 'relovit' ),
                 'error_message'     => __( 'An error occurred. Please try again.', 'relovit' ),
-                'version'           => RELOVIT_VERSION,
             ] );
 
             $this->relovit_render_edit_product_form();
         } else {
+            // Enqueue the script for the products list page.
+            wp_enqueue_script( 'relovit-my-products', RELOVIT_PLUGIN_URL . 'assets/js/my-products.js', [ 'jquery' ], RELOVIT_VERSION, true );
+            wp_localize_script( 'relovit-my-products', 'relovit_my_products', [
+                'delete_url'     => esc_url_raw( rest_url( 'relovit/v1/products/' ) ),
+                'nonce'          => wp_create_nonce( 'wp_rest' ),
+                'confirm_delete' => __( 'Are you sure you want to delete this product?', 'relovit' ),
+            ] );
+
             $this->relovit_render_products_list();
         }
     }
@@ -280,7 +273,6 @@ class Frontend {
         $product_id = isset( $_GET['product_id'] ) ? intval( $_GET['product_id'] ) : 0;
         $product = wc_get_product( $product_id );
 
-        // Security check: Ensure the product exists and belongs to the current user.
         if ( ! $product || get_post_field( 'post_author', $product->get_id() ) != get_current_user_id() ) {
             wc_add_notice( __( 'Invalid product.', 'relovit' ), 'error' );
             echo '<a href="' . esc_url( wc_get_account_endpoint_url( 'relovit-products' ) ) . '">' . __( 'Go back to your products', 'relovit' ) . '</a>';
@@ -356,15 +348,46 @@ class Frontend {
                 <input type="hidden" name="relovit_product_id" value="<?php echo esc_attr( $product_id ); ?>">
             </p>
         </form>
-
-        <div id="relovit-debug-log" style="background-color: #f1f1f1; border: 1px solid #ccc; padding: 10px; margin-top: 20px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: scroll;">
-            <h4><?php esc_html_e( 'Debug Log', 'relovit' ); ?></h4>
-            <ul id="relovit-debug-list" style="list-style-type: none; margin: 0; padding: 0;"></ul>
-        </div>
-
         <?php
     }
 
+    /**
+     * Flush rewrite rules on plugin update to prevent 404 errors.
+     * This runs once to avoid performance issues.
+     */
+    public function flush_rewrite_rules_on_load() {
+        if ( get_option( 'relovit_flush_rewrite_rules_flag' ) ) {
+            return;
+        }
+        flush_rewrite_rules();
+        update_option( 'relovit_flush_rewrite_rules_flag', true );
+    }
+
+    /**
+     * Display the content for the "Relovit Settings" page.
+     */
+    public function relovit_settings_content() {
+        wc_print_notices();
+        $user_id = get_current_user_id();
+        $current_price_range = get_user_meta( $user_id, 'relovit_price_range', true );
+        ?>
+        <h3><?php esc_html_e( 'Relovit Settings', 'relovit' ); ?></h3>
+        <form method="post">
+            <?php wp_nonce_field( 'relovit_save_settings' ); ?>
+            <p>
+                <label for="relovit_price_range"><?php esc_html_e( 'Default Price Range', 'relovit' ); ?></label>
+                <select id="relovit_price_range" name="relovit_price_range" class="woocommerce-Input woocommerce-Input--select">
+                    <option value="Bon marché" <?php selected( $current_price_range, 'Bon marché' ); ?>><?php esc_html_e( 'Inexpensive', 'relovit' ); ?></option>
+                    <option value="Moyen" <?php selected( $current_price_range, 'Moyen' ); ?>><?php esc_html_e( 'Average', 'relovit' ); ?></option>
+                    <option value="Cher" <?php selected( $current_price_range, 'Cher' ); ?>><?php esc_html_e( 'Expensive', 'relovit' ); ?></option>
+                </select>
+            </p>
+            <p>
+                <button type="submit" class="woocommerce-Button button" name="relovit_save_settings" value="<?php esc_attr_e( 'Save changes', 'relovit' ); ?>"><?php esc_html_e( 'Save changes', 'relovit' ); ?></button>
+            </p>
+        </form>
+        <?php
+    }
 
     /**
      * Register shortcodes.
@@ -407,18 +430,6 @@ class Frontend {
      */
     public function enqueue_scripts() {
         global $post;
-        if ( is_account_page() && is_wc_endpoint_url( 'relovit-products' ) ) {
-            // On the main "My Products" list page - note: the edit page script is now enqueued directly in relovit_products_content()
-            if ( ! isset( $_GET['action'] ) || 'edit' !== $_GET['action'] ) {
-                wp_enqueue_script( 'relovit-my-products', RELOVIT_PLUGIN_URL . 'assets/js/my-products.js', [ 'jquery' ], RELOVIT_VERSION, true );
-                wp_localize_script( 'relovit-my-products', 'relovit_my_products', [
-                    'delete_url'     => esc_url_raw( rest_url( 'relovit/v1/products/' ) ),
-                    'nonce'          => wp_create_nonce( 'wp_rest' ),
-                    'confirm_delete' => __( 'Are you sure you want to delete this product?', 'relovit' ),
-                ] );
-            }
-        }
-
         if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'relovit_upload_form' ) ) {
             wp_enqueue_script(
                 'relovit-upload-form',
@@ -427,6 +438,7 @@ class Frontend {
                 RELOVIT_VERSION,
                 true
             );
+
             wp_localize_script(
                 'relovit-upload-form',
                 'relovit_ajax',
