@@ -113,20 +113,47 @@ class Frontend {
         $product->set_description( $description );
         $product->set_regular_price( $price );
 
-        if ( isset( $_POST['relovit_enrich'] ) ) {
-            $api = new \Relovit\API();
-            $request = new \WP_REST_Request( 'POST', '/relovit/v1/enrich-product' );
-            $request->set_body_params( $_POST );
-            $api->enrich_product( $request );
-        } else {
-            $product->save();
+        // Handle file uploads (main image and gallery)
+        require_once( ABSPATH . 'wp-admin/includes/image.php' );
+        require_once( ABSPATH . 'wp-admin/includes/file.php' );
+        require_once( ABSPATH . 'wp-admin/includes/media.php' );
+
+        // Set main image
+        if ( isset( $_FILES['relovit_main_image'] ) && $_FILES['relovit_main_image']['size'] > 0 ) {
+            $attachment_id = media_handle_upload( 'relovit_main_image', $product_id );
+            if ( ! is_wp_error( $attachment_id ) ) {
+                $product->set_image_id( $attachment_id );
+            }
         }
 
-        if ( ! wp_doing_ajax() ) {
-            wc_add_notice( __( 'Product saved successfully.', 'relovit' ), 'success' );
-            wp_redirect( wc_get_account_endpoint_url( 'relovit-products' ) );
-            exit;
+        // Add gallery images
+        if ( isset( $_FILES['relovit_gallery_images'] ) && ! empty( $_FILES['relovit_gallery_images']['name'][0] ) ) {
+            $files = $_FILES['relovit_gallery_images'];
+            $gallery_ids = $product->get_gallery_image_ids();
+
+            foreach ( $files['name'] as $key => $value ) {
+                if ( $files['name'][$key] ) {
+                    $_FILES['single_gallery_image'] = [
+                        'name'     => $files['name'][$key],
+                        'type'     => $files['type'][$key],
+                        'tmp_name' => $files['tmp_name'][$key],
+                        'error'    => $files['error'][$key],
+                        'size'     => $files['size'][$key]
+                    ];
+                    $attachment_id = media_handle_upload( 'single_gallery_image', $product_id );
+                    if ( ! is_wp_error( $attachment_id ) ) {
+                        $gallery_ids[] = $attachment_id;
+                    }
+                }
+            }
+            $product->set_gallery_image_ids( $gallery_ids );
         }
+
+        $product->save();
+
+        wc_add_notice( __( 'Product saved successfully.', 'relovit' ), 'success' );
+        wp_redirect( add_query_arg( [ 'action' => 'edit', 'product_id' => $product->get_id() ], wc_get_account_endpoint_url( 'relovit-products' ) ) );
+        exit;
     }
 
 

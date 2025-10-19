@@ -273,14 +273,14 @@ class API {
     }
 
     public function enrich_product( $request ) {
-        $product_id = $request->get_param( 'product_id' );
+        $product_id = $request->get_param( 'relovit_product_id' );
         $tasks      = $request->get_param( 'relovit_tasks' );
 
         if ( empty( $product_id ) ) {
             return new \WP_Error( 'no_product_id', 'No product ID was provided.', [ 'status' => 400 ] );
         }
 
-        if ( empty( $tasks ) ) {
+        if ( empty( $tasks ) || ! is_array( $tasks ) ) {
             return new \WP_Error( 'no_tasks', 'Please select at least one task to perform.', [ 'status' => 400 ] );
         }
 
@@ -289,41 +289,45 @@ class API {
             return new \WP_Error( 'product_not_found', 'The specified product could not be found.', [ 'status' => 404 ] );
         }
 
+        $files = $request->get_file_params();
 
-        // Handle image uploads
-        if ( ! empty( $_FILES['relovit_main_image'] ) && ! empty( $_FILES['relovit_main_image']['name'] ) ) {
-            require_once( ABSPATH . 'wp-admin/includes/image.php' );
-            require_once( ABSPATH . 'wp-admin/includes/file.php' );
-            require_once( ABSPATH . 'wp-admin/includes/media.php' );
-            $attachment_id = media_handle_upload( 'relovit_main_image', $product_id );
+        // It's better to handle file uploads before other updates.
+        require_once( ABSPATH . 'wp-admin/includes/image.php' );
+        require_once( ABSPATH . 'wp-admin/includes/file.php' );
+        require_once( ABSPATH . 'wp-admin/includes/media.php' );
+
+        if ( isset( $files['relovit_main_image'] ) ) {
+            // The file is in a temp location, use media_handle_sideload
+            $file_array = [
+                'name' => $files['relovit_main_image']['name'],
+                'tmp_name' => $files['relovit_main_image']['tmp_name']
+            ];
+            $attachment_id = media_handle_sideload( $file_array, $product_id );
             if ( ! is_wp_error( $attachment_id ) ) {
                 $product->set_image_id( $attachment_id );
             }
         }
-        if ( ! empty( $_FILES['relovit_gallery_images'] ) && ! empty( $_FILES['relovit_gallery_images']['name'][0] ) ) {
-            require_once( ABSPATH . 'wp-admin/includes/image.php' );
-            require_once( ABSPATH . 'wp-admin/includes/file.php' );
-            require_once( ABSPATH . 'wp-admin/includes/media.php' );
-            $files = $_FILES['relovit_gallery_images'];
+
+        if ( isset( $files['relovit_gallery_images'] ) ) {
             $gallery_ids = $product->get_gallery_image_ids();
-            foreach ( $files['name'] as $key => $value ) {
-                if ( $files['name'][ $key ] ) {
-                    $file = array(
-                        'name'     => $files['name'][ $key ],
-                        'type'     => $files['type'][ $key ],
-                        'tmp_name' => $files['tmp_name'][ $key ],
-                        'error'    => $files['error'][ $key ],
-                        'size'     => $files['size'][ $key ]
-                    );
-                    $_FILES = array( 'relovit_gallery_image' => $file );
-                    $attachment_id = media_handle_upload( 'relovit_gallery_image', $product_id );
-                    if ( ! is_wp_error( $attachment_id ) ) {
-                        $gallery_ids[] = $attachment_id;
-                    }
+            // This handles both single and multiple file uploads for the gallery
+            $gallery_files = $this->format_file_array($files['relovit_gallery_images']);
+
+            foreach ( $gallery_files as $file ) {
+                 $file_array = [
+                    'name' => $file['name'],
+                    'tmp_name' => $file['tmp_name']
+                ];
+                $attachment_id = media_handle_sideload( $file_array, $product_id );
+                if ( ! is_wp_error( $attachment_id ) ) {
+                    $gallery_ids[] = $attachment_id;
                 }
             }
             $product->set_gallery_image_ids( $gallery_ids );
         }
+
+        // Save product after image changes to make them available for AI
+        $product->save();
 
         // Get all image paths associated with the product.
         $image_paths = [];
@@ -403,23 +407,57 @@ class API {
         $tag_terms = wp_get_post_terms( $product->get_id(), 'product_tag', [ 'fields' => 'names' ] );
 
         $product_data = [
+            'title'       => $product->get_name(),
             'description' => $product->get_description(),
             'price'       => $product->get_regular_price(),
             'category_id' => $product->get_category_ids()[0] ?? null,
             'image_id'    => $product->get_image_id(),
             'tags'        => $tag_terms,
+            'message'     => __( 'Product enriched successfully! The page will now be updated.', 'relovit' ),
         ];
 
         return new \WP_REST_Response(
             [
                 'success' => true,
-                'data'    => [
-                    'message' => __( 'Product enriched successfully!', 'relovit' ),
-                    'product' => $product_data,
-                ],
+                'data'    => $product_data,
             ],
             200
         );
+    }
+
+    /**
+     * Reformats the `$_FILES` array from the REST API into a more usable format.
+     *
+     * The WordPress REST API formats the `$_FILES` array differently depending on
+     * whether one or multiple files are uploaded. This function normalizes the
+     * array so it can always be iterated over.
+     *
+     * @param array $file_data The raw file data from `$request->get_file_params()`.
+     * @return array A numerically indexed array of file arrays.
+     */
+    private function format_file_array($file_data) {
+        if ( empty($file_data) ) {
+            return [];
+        }
+
+        $formatted_files = [];
+        if ( is_array($file_data['name']) ) {
+            // Multiple files uploaded
+            foreach ( $file_data['name'] as $key => $name ) {
+                $formatted_files[] = [
+                    'name'     => $name,
+                    'type'     => $file_data['type'][$key],
+                    'tmp_name' => $file_data['tmp_name'][$key],
+                    'error'    => $file_data['error'][$key],
+                    'size'     => $file_data['size'][$key],
+                ];
+            }
+        } else {
+            // Single file uploaded
+            $formatted_files[] = $file_data;
+        }
+
+        return $formatted_files;
     }
 
     /**
