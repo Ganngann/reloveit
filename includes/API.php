@@ -226,12 +226,12 @@ class API {
      * @return bool|\WP_Error
      */
     public function check_enrich_permission( $request ) {
-        $nonce = $request->get_param('relovit_nonce');
-        if ( ! wp_verify_nonce( $nonce, 'relovit_enrich_nonce' ) ) {
-            return new \WP_Error( 'rest_nonce_invalid', __( 'Manual nonce verification failed.', 'relovit' ), [ 'status' => 403 ] );
+        // The default REST API server will have already handled nonce verification.
+        // We only need to check for user login and product ownership.
+        if ( ! is_user_logged_in() ) {
+            return new \WP_Error( 'rest_not_logged_in', __( 'You are not currently logged in.', 'relovit' ), [ 'status' => 401 ] );
         }
 
-        // The product ID is sent as 'relovit_product_id' in the FormData.
         $product_id = $request->get_param('relovit_product_id');
 
         if ( ! $product_id ) {

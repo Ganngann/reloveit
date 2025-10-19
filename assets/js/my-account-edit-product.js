@@ -52,9 +52,9 @@
                     }
 
                     const formData = new FormData(form[0]);
-                    // Add the nonce to the form data for explicit verification
-                    formData.append('relovit_nonce', relovit_edit_product.nonce);
-                    log('FormData created and nonce appended.');
+                    // Add the nonce to the form data with the key WordPress expects.
+                    formData.append('_wpnonce', relovit_edit_product.nonce);
+                    log('FormData created and _wpnonce appended.');
 
                     spinner.show();
                     enrichBtn.prop('disabled', true);
