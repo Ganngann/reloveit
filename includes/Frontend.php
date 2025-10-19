@@ -188,6 +188,17 @@ class Frontend {
      */
     public function relovit_products_content() {
         if ( isset( $_GET['action'] ) && 'edit' === $_GET['action'] && ! empty( $_GET['product_id'] ) ) {
+            // Enqueue the script right before rendering the form that needs it.
+            $product_id = intval( $_GET['product_id'] );
+            wp_enqueue_script( 'relovit-edit-product', RELOVIT_PLUGIN_URL . 'assets/js/my-account-edit-product.js', [ 'jquery' ], RELOVIT_VERSION, true );
+            wp_localize_script( 'relovit-edit-product', 'relovit_edit_product', [
+                'api_url'           => esc_url_raw( rest_url( 'relovit/v1/enrich-product' ) ),
+                'nonce'             => wp_create_nonce( 'wp_rest' ),
+                'product_id'        => $product_id,
+                'no_tasks_selected' => __( 'Please select at least one AI task.', 'relovit' ),
+                'error_message'     => __( 'An error occurred. Please try again.', 'relovit' ),
+            ] );
+
             $this->relovit_render_edit_product_form();
         } else {
             $this->relovit_render_products_list();
@@ -396,21 +407,8 @@ class Frontend {
     public function enqueue_scripts() {
         global $post;
         if ( is_account_page() && is_wc_endpoint_url( 'relovit-products' ) ) {
-            $action = get_query_var( 'action' );
-            $product_id = get_query_var( 'product_id' );
-
-            if ( $action === 'edit' && ! empty( $product_id ) ) {
-                // On the "Edit Product" sub-page
-                wp_enqueue_script( 'relovit-edit-product', RELOVIT_PLUGIN_URL . 'assets/js/my-account-edit-product.js', [ 'jquery' ], RELOVIT_VERSION, true );
-                wp_localize_script( 'relovit-edit-product', 'relovit_edit_product', [
-                    'api_url'           => esc_url_raw( rest_url( 'relovit/v1/enrich-product' ) ),
-                    'nonce'             => wp_create_nonce( 'wp_rest' ),
-                    'product_id'        => intval( $product_id ),
-                    'no_tasks_selected' => __( 'Please select at least one AI task.', 'relovit' ),
-                    'error_message'     => __( 'An error occurred. Please try again.', 'relovit' ),
-                ] );
-            } else {
-                // On the main "My Products" list page
+            // On the main "My Products" list page - note: the edit page script is now enqueued directly in relovit_products_content()
+            if ( ! isset( $_GET['action'] ) || 'edit' !== $_GET['action'] ) {
                 wp_enqueue_script( 'relovit-my-products', RELOVIT_PLUGIN_URL . 'assets/js/my-products.js', [ 'jquery' ], RELOVIT_VERSION, true );
                 wp_localize_script( 'relovit-my-products', 'relovit_my_products', [
                     'delete_url'     => esc_url_raw( rest_url( 'relovit/v1/products/' ) ),
