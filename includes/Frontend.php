@@ -25,6 +25,7 @@ class Frontend {
         add_filter( 'woocommerce_account_menu_items', [ $this, 'relovit_account_menu_items' ] );
         add_action( 'init', [ $this, 'relovit_add_my_account_endpoint' ] );
         add_filter( 'query_vars', [ $this, 'relovit_add_query_vars' ], 0 );
+        add_action( 'woocommerce_account_relovit-dashboard_endpoint', [ $this, 'relovit_dashboard_content' ] );
         add_action( 'woocommerce_account_relovit-settings_endpoint', [ $this, 'relovit_settings_content' ] );
         add_action( 'woocommerce_account_relovit-products_endpoint', [ $this, 'relovit_products_content' ] );
         add_action( 'template_redirect', [ $this, 'relovit_save_settings' ] );
@@ -128,29 +129,23 @@ class Frontend {
      * @return array
      */
     public function relovit_account_menu_items( $items ) {
-        // Add 'My Products' before 'Relovit Settings'
-        $new_items = [];
-        foreach ($items as $key => $value) {
-            if ($key === 'relovit-settings') {
-                $new_items['relovit-products'] = __( 'My Products', 'relovit' );
-            }
-            $new_items[$key] = $value;
-        }
-        // If 'relovit-settings' was not found, add it at the end.
-        if (!isset($new_items['relovit-settings'])) {
-             $new_items['relovit-settings'] = __( 'Relovit Settings', 'relovit' );
-        }
-        if (!isset($new_items['relovit-products'])) {
-             $new_items['relovit-products'] = __( 'My Products', 'relovit' );
-        }
+        $relovit_items = [
+            'relovit-dashboard' => __( 'Dashboard', 'relovit' ),
+            'relovit-products'  => __( 'My Products', 'relovit' ),
+            'relovit-settings'  => __( 'Relovit Settings', 'relovit' ),
+        ];
 
-        return $new_items;
+        // Add the custom items after the 'orders' item.
+        return array_slice( $items, 0, array_search( 'orders', array_keys( $items ) ) + 1, true ) +
+               $relovit_items +
+               array_slice( $items, array_search( 'orders', array_keys( $items ) ) + 1, null, true );
     }
 
     /**
      * Add endpoint for the "Relovit Settings" page.
      */
     public function relovit_add_my_account_endpoint() {
+        add_rewrite_endpoint( 'relovit-dashboard', EP_PAGES );
         add_rewrite_endpoint( 'relovit-settings', EP_PAGES );
         add_rewrite_endpoint( 'relovit-products', EP_PAGES );
     }
@@ -162,11 +157,192 @@ class Frontend {
      * @return array
      */
     public function relovit_add_query_vars( $vars ) {
+        $vars[] = 'relovit-dashboard';
         $vars[] = 'relovit-settings';
         $vars[] = 'relovit-products';
         $vars[] = 'action';
         $vars[] = 'product_id';
         return $vars;
+    }
+
+    /**
+     * Display the content for the "Relovit Dashboard" page.
+     */
+    public function relovit_dashboard_content() {
+        $product_stats = $this->get_seller_product_stats();
+        $sales_stats   = $this->get_seller_sales_stats();
+        ?>
+        <div class="relovit-quick-actions">
+            <h3 style="margin: 0; flex-grow: 1;"><?php esc_html_e( 'Seller Dashboard', 'relovit' ); ?></h3>
+            <a href="<?php echo esc_url( wc_get_account_endpoint_url( 'relovit-products' ) ); ?>" class="button"><?php esc_html_e( 'Add New Product', 'relovit' ); ?></a>
+        </div>
+        <p><?php esc_html_e( 'Welcome to your dashboard. Here you will find a summary of your sales and products.', 'relovit' ); ?></p>
+
+        <h4><?php esc_html_e( 'Sales Overview', 'relovit' ); ?></h4>
+        <div class="relovit-stat-widgets">
+            <div class="relovit-stat-widget">
+                <span class="stat-value"><?php echo wp_kses_post( wc_price( $sales_stats->total_revenue ) ); ?></span>
+                <span class="stat-label"><?php esc_html_e( 'Total Revenue', 'relovit' ); ?></span>
+            </div>
+            <div class="relovit-stat-widget">
+                <span class="stat-value"><?php echo esc_html( $sales_stats->order_count ); ?></span>
+                <span class="stat-label"><?php esc_html_e( 'Orders', 'relovit' ); ?></span>
+            </div>
+        </div>
+
+        <h4><?php esc_html_e( 'Your Products', 'relovit' ); ?></h4>
+        <div class="relovit-stat-widgets">
+            <div class="relovit-stat-widget">
+                <span class="stat-value"><?php echo esc_html( $product_stats->publish ); ?></span>
+                <span class="stat-label"><?php esc_html_e( 'Online', 'relovit' ); ?></span>
+            </div>
+            <div class="relovit-stat-widget">
+                <span class="stat-value"><?php echo esc_html( $product_stats->draft ); ?></span>
+                <span class="stat-label"><?php esc_html_e( 'Drafts', 'relovit' ); ?></span>
+            </div>
+            <div class="relovit-stat-widget">
+                <span class="stat-value"><?php echo esc_html( $product_stats->pending ); ?></span>
+                <span class="stat-label"><?php esc_html_e( 'Pending Review', 'relovit' ); ?></span>
+            </div>
+        </div>
+
+        <?php
+        $this->render_dashboard_recent_products();
+    }
+
+    /**
+     * Get product statistics for the current seller.
+     *
+     * @return object An object containing product counts by status.
+     */
+    private function get_seller_product_stats() {
+        global $wpdb;
+        $user_id = get_current_user_id();
+
+        $stats = [
+            'publish' => 0,
+            'draft'   => 0,
+            'pending' => 0,
+        ];
+
+        $sql = "
+            SELECT post_status, COUNT( * ) AS num_posts
+            FROM {$wpdb->posts}
+            WHERE post_type = 'product'
+            AND post_author = %d
+            AND post_status IN ( 'publish', 'draft', 'pending' )
+            GROUP BY post_status
+        ";
+
+        $results = $wpdb->get_results( $wpdb->prepare( $sql, $user_id ) );
+
+        if ( $results ) {
+            foreach ( $results as $row ) {
+                $stats[ $row->post_status ] = (int) $row->num_posts;
+            }
+        }
+
+        return (object) $stats;
+    }
+
+    /**
+     * Get sales statistics for the current seller.
+     *
+     * @return object An object containing total revenue and order count.
+     */
+    private function get_seller_sales_stats() {
+        global $wpdb;
+        $user_id = get_current_user_id();
+
+        $sql = "
+            SELECT
+                SUM(order_item_meta.meta_value) as total_revenue,
+                COUNT(DISTINCT p.ID) as order_count
+            FROM
+                {$wpdb->posts} as p
+            INNER JOIN
+                {$wpdb->prefix}woocommerce_order_items as order_items ON p.ID = order_items.order_id
+            INNER JOIN
+                {$wpdb->prefix}woocommerce_order_itemmeta as order_item_meta ON order_items.order_item_id = order_item_meta.order_item_id
+            INNER JOIN
+                {$wpdb->prefix}woocommerce_order_itemmeta as order_item_meta2 ON order_items.order_item_id = order_item_meta2.order_item_id
+            INNER JOIN
+                {$wpdb->posts} as products ON order_item_meta2.meta_value = products.ID
+            WHERE
+                p.post_type = 'shop_order'
+                AND p.post_status IN ('wc-completed', 'wc-processing')
+                AND order_items.order_item_type = 'line_item'
+                AND order_item_meta.meta_key = '_line_total'
+                AND order_item_meta2.meta_key = '_product_id'
+                AND products.post_author = %d
+        ";
+
+        $results = $wpdb->get_row( $wpdb->prepare( $sql, $user_id ) );
+
+        return (object) [
+            'total_revenue' => $results->total_revenue ?? 0,
+            'order_count'   => $results->order_count ?? 0,
+        ];
+    }
+
+    /**
+     * Render the recent products list for the dashboard.
+     */
+    private function render_dashboard_recent_products() {
+        $products_query = new \WP_Query( [
+            'author'         => get_current_user_id(),
+            'post_type'      => 'product',
+            'posts_per_page' => 5,
+            'post_status'    => [ 'draft', 'pending', 'publish' ],
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+        ] );
+
+        if ( ! $products_query->have_posts() ) {
+            return;
+        }
+        ?>
+        <h4><?php esc_html_e( 'Recent Products', 'relovit' ); ?></h4>
+        <table class="woocommerce-table woocommerce-table--order-details shop_table order_details">
+            <thead>
+                <tr>
+                    <th class="woocommerce-table__product-name product-name"><?php esc_html_e( 'Product', 'relovit' ); ?></th>
+                    <th class="woocommerce-table__product-table product-status"><?php esc_html_e( 'Status', 'relovit' ); ?></th>
+                    <th class="woocommerce-table__product-table product-actions"><?php esc_html_e( 'Actions', 'relovit' ); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                while ( $products_query->have_posts() ) {
+                    $products_query->the_post();
+                    $product = wc_get_product( get_the_ID() );
+                    $edit_url = add_query_arg( [
+                        'action'     => 'edit',
+                        'product_id' => $product->get_id(),
+                    ], wc_get_account_endpoint_url( 'relovit-products' ) );
+                    ?>
+                    <tr class="woocommerce-table__line-item order_item">
+                        <td class="woocommerce-table__product-name product-name">
+                            <a href="<?php echo esc_url( $edit_url ); ?>"><?php the_title(); ?></a>
+                        </td>
+                        <td class="woocommerce-table__product-status product-status">
+                            <?php
+                            $status_object = get_post_status_object( $product->get_status() );
+                            echo esc_html( $status_object->label ?? ucfirst( $product->get_status() ) );
+                            ?>
+                        </td>
+                        <td class="woocommerce-table__product-actions product-actions">
+                            <a href="<?php echo esc_url( $edit_url ); ?>" class="button edit"><?php esc_html_e( 'Edit', 'relovit' ); ?></a>
+                            <a href="<?php echo esc_url( get_permalink( $product->get_id() ) ); ?>" class="button view" target="_blank"><?php esc_html_e( 'View', 'relovit' ); ?></a>
+                        </td>
+                    </tr>
+                    <?php
+                }
+                wp_reset_postdata();
+                ?>
+            </tbody>
+        </table>
+        <?php
     }
 
     /**
@@ -352,18 +528,6 @@ class Frontend {
     }
 
     /**
-     * Flush rewrite rules on plugin update to prevent 404 errors.
-     * This runs once to avoid performance issues.
-     */
-    public function flush_rewrite_rules_on_load() {
-        if ( get_option( 'relovit_flush_rewrite_rules_flag' ) ) {
-            return;
-        }
-        flush_rewrite_rules();
-        update_option( 'relovit_flush_rewrite_rules_flag', true );
-    }
-
-    /**
      * Display the content for the "Relovit Settings" page.
      */
     public function relovit_settings_content() {
@@ -430,6 +594,17 @@ class Frontend {
      */
     public function enqueue_scripts() {
         global $post;
+
+        // Enqueue dashboard styles.
+        if ( is_account_page() && is_wc_endpoint_url( 'relovit-dashboard' ) ) {
+            wp_enqueue_style(
+                'relovit-dashboard',
+                RELOVIT_PLUGIN_URL . 'assets/css/dashboard.css',
+                [],
+                RELOVIT_VERSION
+            );
+        }
+
         if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'relovit_upload_form' ) ) {
             wp_enqueue_script(
                 'relovit-upload-form',
