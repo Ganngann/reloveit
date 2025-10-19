@@ -3,7 +3,7 @@
  * Plugin Name:       Relovit
  * Plugin URI:        https://gann.be/
  * Description:       Utilise l'IA (Gemini) pour identifier des objets dans une image et créer des fiches produits dans WooCommerce.
- * Version:           1.2.0
+ * Version:           1.3.3
  * Author:            Morgan Schaefer
  * Author URI:        https://gann.be/
  * License:           GPL v2 or later
@@ -17,7 +17,7 @@ if ( ! defined( 'WPINC' ) ) {
     die;
 }
 
-define( 'RELOVIT_VERSION', '1.2.0' );
+define( 'RELOVIT_VERSION', '1.3.3' );
 define( 'RELOVIT_PLUGIN_FILE', __FILE__ );
 
 // Include the main plugin class.
@@ -29,12 +29,34 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/Plugin.php';
  * This action is only scheduled once.
  */
 function relovit_activate() {
-    // Register the custom endpoints to ensure they are available.
-    \Relovit\Frontend::relovit_add_my_account_endpoint();
-    // Flush the rewrite rules.
-    flush_rewrite_rules();
+    // Set a flag to flush rewrite rules on the next page load.
+    add_option( 'relovit_flush_rewrite_rules', true );
 }
 register_activation_hook( __FILE__, 'relovit_activate' );
+
+/**
+ * Flush rewrite rules on plugin update.
+ */
+function relovit_flush_rewrite_rules_on_update() {
+    $version = get_option( 'relovit_version', '1.0.0' );
+    if ( version_compare( $version, RELOVIT_VERSION, '<' ) ) {
+        add_option( 'relovit_flush_rewrite_rules', true );
+        update_option( 'relovit_version', RELOVIT_VERSION );
+    }
+}
+add_action( 'plugins_loaded', 'relovit_flush_rewrite_rules_on_update' );
+
+
+/**
+ * Flush rewrite rules if the flag is set.
+ */
+function relovit_maybe_flush_rewrite_rules() {
+    if ( get_option( 'relovit_flush_rewrite_rules' ) ) {
+        flush_rewrite_rules();
+        delete_option( 'relovit_flush_rewrite_rules' );
+    }
+}
+add_action( 'init', 'relovit_maybe_flush_rewrite_rules', 20 );
 
 /**
  * The code that runs during plugin deactivation.

@@ -24,6 +24,21 @@ class API {
     }
 
     /**
+     * Check if the user has the required permissions for creating products.
+     *
+     * @return bool|\WP_Error
+     */
+    public function check_creation_permissions() {
+        if ( ! current_user_can( 'upload_files' ) ) {
+            return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to upload files.', 'relovit' ), [ 'status' => 403 ] );
+        }
+        if ( ! current_user_can( 'edit_products' ) ) {
+            return new \WP_Error( 'rest_forbidden', __( 'Sorry, you are not allowed to create products.', 'relovit' ), [ 'status' => 403 ] );
+        }
+        return true;
+    }
+
+    /**
      * Register the routes for the objects of the controller.
      */
     public function register_routes() {
@@ -33,7 +48,7 @@ class API {
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [ $this, 'identify_objects' ],
-                'permission_callback' => [ $this, 'check_permissions' ],
+                'permission_callback' => [ $this, 'check_creation_permissions' ],
             ]
         );
 
@@ -43,7 +58,7 @@ class API {
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [ $this, 'create_products' ],
-                'permission_callback' => [ $this, 'check_permissions' ],
+                'permission_callback' => [ $this, 'check_creation_permissions' ],
             ]
         );
 

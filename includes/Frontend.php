@@ -18,23 +18,15 @@ class Frontend {
      * Frontend constructor.
      */
     public function __construct() {
-        add_action( 'init', [ $this, 'init_hooks' ] );
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
-    }
-
-    /**
-     * Initialize hooks.
-     */
-    public function init_hooks() {
-        $this->register_shortcodes();
+        add_action( 'init', [ $this, 'register_shortcodes' ] );
 
         // WooCommerce hooks for "My Account" page.
         add_filter( 'woocommerce_account_menu_items', [ $this, 'relovit_account_menu_items' ] );
-        add_action( 'init', [ $this, 'relovit_add_my_account_endpoint' ] );
+        add_action( 'init', [ __CLASS__, 'relovit_add_my_account_endpoint' ] );
         add_filter( 'query_vars', [ $this, 'relovit_add_query_vars' ], 0 );
         add_action( 'woocommerce_account_relovit-settings_endpoint', [ $this, 'relovit_settings_content' ] );
         add_action( 'woocommerce_account_relovit-products_endpoint', [ $this, 'relovit_products_content' ] );
-        add_action( 'woocommerce_account_relovit-edit-product_endpoint', [ $this, 'relovit_edit_product_content' ] );
         add_action( 'template_redirect', [ $this, 'relovit_save_settings' ] );
         add_action( 'template_redirect', [ $this, 'relovit_save_product' ] );
     }
@@ -80,7 +72,6 @@ class Frontend {
     public static function relovit_add_my_account_endpoint() {
         add_rewrite_endpoint( 'relovit-settings', EP_PAGES );
         add_rewrite_endpoint( 'relovit-products', EP_PAGES );
-        add_rewrite_endpoint( 'relovit-edit-product', EP_PAGES );
     }
 
     /**
@@ -92,7 +83,8 @@ class Frontend {
     public function relovit_add_query_vars( $vars ) {
         $vars[] = 'relovit-settings';
         $vars[] = 'relovit-products';
-        $vars[] = 'relovit-edit-product';
+        $vars[] = 'action';
+        $vars[] = 'product_id';
         return $vars;
     }
 
@@ -157,71 +149,18 @@ class Frontend {
      * Display the content for the "Relovit Products" page.
      */
     public function relovit_products_content() {
-        ?>
-        <h3><?php esc_html_e( 'My Products', 'relovit' ); ?></h3>
-        <?php
-        $user_id = get_current_user_id();
-        $args = [
-            'author' => $user_id,
-            'post_type' => 'product',
-            'posts_per_page' => -1,
-            'post_status' => ['draft', 'pending', 'publish']
-        ];
-        $products_query = new \WP_Query($args);
-
-        if ( ! $products_query->have_posts() ) {
-            echo '<p>' . esc_html__( 'You have not created any products yet.', 'relovit' ) . '</p>';
-            return;
+        if ( isset( $_GET['action'] ) && 'edit' === $_GET['action'] && ! empty( $_GET['product_id'] ) ) {
+            $this->relovit_edit_product_content();
+		} else {
+            $this->relovit_products_list_content();
         }
-        ?>
-        <table class="woocommerce-table woocommerce-table--order-details shop_table order_details">
-            <thead>
-                <tr>
-                    <th class="woocommerce-table__product-name product-name"><?php esc_html_e( 'Product', 'relovit' ); ?></th>
-                    <th class="woocommerce-table__product-table product-status"><?php esc_html_e( 'Status', 'relovit' ); ?></th>
-                    <th class="woocommerce-table__product-table product-price"><?php esc_html_e( 'Price', 'relovit' ); ?></th>
-                    <th class="woocommerce-table__product-table product-actions"><?php esc_html_e( 'Actions', 'relovit' ); ?></th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php
-                while ( $products_query->have_posts() ) {
-                    $products_query->the_post();
-                    $product = wc_get_product( get_the_ID() );
-                    ?>
-                    <tr class="woocommerce-table__line-item order_item">
-                        <td class="woocommerce-table__product-name product-name">
-                            <a href="<?php echo esc_url( wc_get_endpoint_url( 'relovit-edit-product', get_the_ID() ) ); ?>"><?php the_title(); ?></a>
-                        </td>
-                        <td class="woocommerce-table__product-status product-status">
-                            <?php
-                            $status_object = get_post_status_object( $product->get_status() );
-                            echo esc_html( $status_object->label ?? ucfirst( $product->get_status() ) );
-                            ?>
-                        </td>
-                        <td class="woocommerce-table__product-price product-price">
-                            <?php echo wp_kses_post( $product->get_price_html() ); ?>
-                        </td>
-                        <td class="woocommerce-table__product-actions product-actions">
-                            <a href="<?php echo esc_url( wc_get_endpoint_url( 'relovit-edit-product', get_the_ID() ) ); ?>" class="button edit"><?php esc_html_e( 'Edit', 'relovit' ); ?></a>
-                            <a href="#" class="button delete" data-product-id="<?php echo get_the_ID(); ?>"><?php esc_html_e( 'Delete', 'relovit' ); ?></a>
-                        </td>
-                    </tr>
-                    <?php
-                }
-                wp_reset_postdata();
-                ?>
-            </tbody>
-        </table>
-        <?php
     }
 
     /**
      * Display the content for the "Relovit Edit Product" page.
      */
     public function relovit_edit_product_content() {
-        global $wp;
-        $product_id = $wp->query_vars['relovit-edit-product'];
+        $product_id = isset( $_GET['product_id'] ) ? intval( $_GET['product_id'] ) : 0;
         $product = wc_get_product( $product_id );
 
         // Security check: Ensure the product exists and belongs to the current user.
@@ -254,6 +193,71 @@ class Frontend {
         </form>
         <?php
     }
+
+    /**
+     * Display the list of products.
+     */
+    public function relovit_products_list_content() {
+        ?>
+        <h3><?php esc_html_e( 'My Products', 'relovit' ); ?></h3>
+        <?php
+        wc_print_notices();
+        $user_id = get_current_user_id();
+        $args = [
+            'author' => $user_id,
+            'post_type' => 'product',
+            'posts_per_page' => -1,
+            'post_status' => ['draft', 'pending', 'publish']
+        ];
+        $products_query = new \WP_Query($args);
+
+        if ( ! $products_query->have_posts() ) {
+            echo '<p>' . esc_html__( 'You have not created any products yet.', 'relovit' ) . '</p>';
+            return;
+        }
+        ?>
+        <table class="woocommerce-table woocommerce-table--order-details shop_table order_details">
+            <thead>
+                <tr>
+                    <th class="woocommerce-table__product-name product-name"><?php esc_html_e( 'Product', 'relovit' ); ?></th>
+                    <th class="woocommerce-table__product-table product-status"><?php esc_html_e( 'Status', 'relovit' ); ?></th>
+                    <th class="woocommerce-table__product-table product-price"><?php esc_html_e( 'Price', 'relovit' ); ?></th>
+                    <th class="woocommerce-table__product-table product-actions"><?php esc_html_e( 'Actions', 'relovit' ); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                while ( $products_query->have_posts() ) {
+                    $products_query->the_post();
+                    $product = wc_get_product( get_the_ID() );
+                    ?>
+                    <tr class="woocommerce-table__line-item order_item">
+                        <td class="woocommerce-table__product-name product-name">
+                            <a href="<?php echo esc_url( add_query_arg( [ 'action' => 'edit', 'product_id' => $product->get_id() ], wc_get_account_endpoint_url( 'relovit-products' ) ) ); ?>"><?php the_title(); ?></a>
+                        </td>
+                        <td class="woocommerce-table__product-status product-status">
+                            <?php
+                            $status_object = get_post_status_object( $product->get_status() );
+                            echo esc_html( $status_object->label ?? ucfirst( $product->get_status() ) );
+                            ?>
+                        </td>
+                        <td class="woocommerce-table__product-price product-price">
+                            <?php echo wp_kses_post( $product->get_price_html() ); ?>
+                        </td>
+                        <td class="woocommerce-table__product-actions product-actions">
+                            <a href="<?php echo esc_url( add_query_arg( [ 'action' => 'edit', 'product_id' => $product->get_id() ], wc_get_account_endpoint_url( 'relovit-products' ) ) ); ?>" class="button edit"><?php esc_html_e( 'Edit', 'relovit' ); ?></a>
+                            <a href="#" class="button delete" data-product-id="<?php echo esc_attr( $product->get_id() ); ?>"><?php esc_html_e( 'Delete', 'relovit' ); ?></a>
+                        </td>
+                    </tr>
+                    <?php
+                }
+                wp_reset_postdata();
+                ?>
+            </tbody>
+        </table>
+        <?php
+    }
+
 
     /**
      * Register shortcodes.
