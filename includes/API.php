@@ -272,83 +272,29 @@ class API {
         return new \WP_REST_Response( [ 'success' => true, 'data' => [ 'message' => 'Product deleted successfully.' ] ], 200 );
     }
 
-    /**
-     * Enrich a product with AI-generated content.
-     *
-     * @param \WP_REST_Request $request Full data about the request.
-     * @return \WP_REST_Response|\WP_Error
-     */
     public function enrich_product( $request ) {
         $product_id = $request->get_param( 'product_id' );
-        $files      = $request->get_file_params();
+        $tasks      = $request->get_param( 'relovit_tasks' ) ?: [];
 
         if ( empty( $product_id ) ) {
             return new \WP_Error( 'no_product_id', 'No product ID was provided.', [ 'status' => 400 ] );
         }
 
-        $tasks = $request->get_param( 'relovit_tasks' ) ?: [];
         if ( empty( $tasks ) ) {
             return new \WP_Error( 'no_tasks', 'Please select at least one task to perform.', [ 'status' => 400 ] );
         }
 
-        // Handle file uploads.
-        require_once ABSPATH . 'wp-admin/includes/image.php';
-        require_once ABSPATH . 'wp-admin/includes/file.php';
-        require_once ABSPATH . 'wp-admin/includes/media.php';
-
-        $attachment_ids = [];
-        $image_paths    = [];
-
-        $attachment_ids = [];
-        $image_paths    = [];
-
-        if ( ! empty( $files['relovit_images'] ) ) {
-            $upload_overrides = [ 'test_form' => false ];
-
-            foreach ( $files['relovit_images']['tmp_name'] as $key => $tmp_name ) {
-                if ( empty( $tmp_name ) ) {
-                    continue;
-                }
-                $uploaded_file = [
-                    'name'     => $files['relovit_images']['name'][ $key ],
-                    'type'     => $files['relovit_images']['type'][ $key ],
-                    'tmp_name' => $tmp_name,
-                    'error'    => $files['relovit_images']['error'][ $key ],
-                    'size'     => $files['relovit_images']['size'][ $key ],
-                ];
-
-                $movefile = wp_handle_upload( $uploaded_file, $upload_overrides );
-
-                if ( $movefile && ! isset( $movefile['error'] ) ) {
-                    $attachment = [
-                        'guid'           => $movefile['url'],
-                        'post_mime_type' => $movefile['type'],
-                        'post_title'     => preg_replace( '/\.[^.]+$/', '', basename( $movefile['file'] ) ),
-                        'post_content'   => '',
-                        'post_status'    => 'inherit',
-                    ];
-
-                    $attachment_id = wp_insert_attachment( $attachment, $movefile['file'], $product_id );
-                    require_once ABSPATH . 'wp-admin/includes/image.php';
-                    $attachment_data = wp_generate_attachment_metadata( $attachment_id, $movefile['file'] );
-                    wp_update_attachment_metadata( $attachment_id, $attachment_data );
-
-                    $attachment_ids[] = $attachment_id;
-                    $image_paths[]    = $movefile['file'];
-                } else {
-                    return new \WP_Error( 'upload_error', $movefile['error'], [ 'status' => 500 ] );
-                }
-            }
+        $product = wc_get_product( $product_id );
+        if ( ! $product ) {
+            return new \WP_Error( 'product_not_found', 'The specified product could not be found.', [ 'status' => 404 ] );
         }
 
-        // Get the main product image as well.
+        // Get all image paths associated with the product.
+        $image_paths = [];
         $main_image_id = get_post_thumbnail_id( $product_id );
         if ( $main_image_id ) {
             $image_paths[] = get_attached_file( $main_image_id );
         }
-
-        // Get gallery images.
-        $product = wc_get_product( $product_id );
         $gallery_image_ids = $product->get_gallery_image_ids();
         foreach ( $gallery_image_ids as $gallery_image_id ) {
             $image_paths[] = get_attached_file( $gallery_image_id );
@@ -359,102 +305,72 @@ class API {
             return new \WP_Error( 'no_images_found', 'No images found for this product. Please upload at least one.', [ 'status' => 400 ] );
         }
 
-        if ( ! $product ) {
-            return new \WP_Error( 'product_not_found', 'The specified product could not be found.', [ 'status' => 404 ] );
-        }
-
         $product_name = $product->get_name();
         $gemini_api   = new Gemini_API();
 
-        $tasks = $request->get_param( 'relovit_tasks' ) ?: [];
-
         if ( in_array( 'description', $tasks, true ) ) {
             $description = $gemini_api->generate_description( $product_name, $image_paths );
-            if ( is_wp_error( $description ) ) {
-                return $description;
+            if ( ! is_wp_error( $description ) ) {
+                $product->set_description( $description );
             }
-            $product->set_description( $description );
         }
 
         if ( in_array( 'price', $tasks, true ) ) {
             $user_id = get_current_user_id();
             $price_range = get_user_meta( $user_id, 'relovit_price_range', true );
             $price = $gemini_api->generate_price( $product_name, $image_paths, $price_range ?: 'Moyen' );
-            if ( is_wp_error( $price ) ) {
-                return $price;
+            if ( ! is_wp_error( $price ) ) {
+                $product->set_regular_price( floatval( $price ) );
             }
-            $product->set_regular_price( floatval( $price ) );
         }
 
         if ( in_array( 'category', $tasks, true ) ) {
             $taxonomy_terms = $gemini_api->generate_taxonomy_terms( $product_name, $image_paths );
             if ( ! is_wp_error( $taxonomy_terms ) && ! empty( $taxonomy_terms ) ) {
-                // Handle hierarchical categories.
                 if ( ! empty( $taxonomy_terms['category'] ) ) {
                     $category_id = $this->find_or_create_term_path( $taxonomy_terms['category'], 'product_cat' );
                     if ( $category_id ) {
                         $product->set_category_ids( [ $category_id ] );
                     }
                 }
-
-                // Handle tags.
                 if ( ! empty( $taxonomy_terms['tags'] ) ) {
                     wp_set_post_terms( $product_id, $taxonomy_terms['tags'], 'product_tag', false );
                 }
             }
         }
 
-        if ( in_array( 'image', $tasks, true ) && ! empty( $image_paths ) ) {
+        if ( in_array( 'image', $tasks, true ) ) {
             $generated_image_data = $gemini_api->generate_image( $image_paths[0] );
-
-            if ( is_wp_error( $generated_image_data ) ) {
-                return $generated_image_data;
+            if ( ! is_wp_error( $generated_image_data ) ) {
+                $upload = wp_upload_bits( 'generated-image.png', null, base64_decode( $generated_image_data ) );
+                if ( empty( $upload['error'] ) ) {
+                    $attachment = [
+                        'post_mime_type' => 'image/png',
+                        'post_title'     => $product_name . ' - AI Generated',
+                        'post_content'   => '',
+                        'post_status'    => 'inherit',
+                    ];
+                    $new_attachment_id = wp_insert_attachment( $attachment, $upload['file'], $product_id );
+                    if ( ! is_wp_error( $new_attachment_id ) ) {
+                        require_once ABSPATH . 'wp-admin/includes/image.php';
+                        $attachment_data = wp_generate_attachment_metadata( $new_attachment_id, $upload['file'] );
+                        wp_update_attachment_metadata( $new_attachment_id, $attachment_data );
+                        $product->set_image_id( $new_attachment_id );
+                    }
+                }
             }
-
-            // Upload the generated image from base64 data.
-            $upload = wp_upload_bits( 'generated-image.png', null, base64_decode( $generated_image_data ) );
-            if ( ! empty( $upload['error'] ) ) {
-                return new \WP_Error( 'image_gen_upload_failed', $upload['error'], [ 'status' => 500 ] );
-            }
-
-            $attachment = [
-                'post_mime_type' => 'image/png',
-                'post_title'     => $product_name . ' - AI Generated',
-                'post_content'   => '',
-                'post_status'    => 'inherit',
-            ];
-            $new_attachment_id = wp_insert_attachment( $attachment, $upload['file'], $product_id );
-            if ( is_wp_error( $new_attachment_id ) ) {
-                return $new_attachment_id;
-            }
-
-            require_once ABSPATH . 'wp-admin/includes/image.php';
-            $attachment_data = wp_generate_attachment_metadata( $new_attachment_id, $upload['file'] );
-            wp_update_attachment_metadata( $new_attachment_id, $attachment_data );
-            $product->set_image_id( $new_attachment_id );
         }
 
-        // Update the product.
-        $existing_gallery_ids = $product->get_gallery_image_ids();
-        $new_gallery_ids      = array_unique( array_merge( $existing_gallery_ids, $attachment_ids ) );
-        $product->set_gallery_image_ids( $new_gallery_ids );
         $product->set_status( 'pending' );
-        $result = $product->save();
+        $product->save();
 
-        if ( is_wp_error( $result ) || $result === 0 ) {
-            return new \WP_Error( 'product_save_failed', __( 'Could not save the product after enrichment.', 'relovit' ), [ 'status' => 500 ] );
-        }
-
-        // Get the names of the tags to return them in the response.
         $tag_terms = wp_get_post_terms( $product->get_id(), 'product_tag', [ 'fields' => 'names' ] );
 
         $product_data = [
-            'title'       => $product->get_name(),
             'description' => $product->get_description(),
             'price'       => $product->get_regular_price(),
             'category_id' => $product->get_category_ids()[0] ?? null,
             'image_id'    => $product->get_image_id(),
-            'gallery_ids' => $product->get_gallery_image_ids(),
             'tags'        => $tag_terms,
         ];
 

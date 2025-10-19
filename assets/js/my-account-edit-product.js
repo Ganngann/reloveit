@@ -15,21 +15,22 @@
                 return;
             }
 
-            const formData = new FormData();
-            formData.append('action', 'relovit_enrich_product');
-            formData.append('product_id', relovit_edit_product.product_id);
-            formData.append('relovit_tasks', tasks);
-            formData.append('_ajax_nonce', relovit_edit_product.nonce);
+            const data = {
+                'product_id': relovit_edit_product.product_id,
+                'relovit_tasks': tasks,
+            };
 
             spinner.show();
             enrichBtn.prop('disabled', true);
 
             $.ajax({
-                url: relovit_edit_product.ajax_url,
+                url: relovit_edit_product.api_url,
                 type: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false,
+                data: JSON.stringify(data),
+                contentType: 'application/json; charset=utf-8',
+                beforeSend: function (xhr) {
+                    xhr.setRequestHeader('X-WP-Nonce', relovit_edit_product.nonce);
+                },
                 success: function (response) {
                     if (response.success) {
                         const product = response.data.product;

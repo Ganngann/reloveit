@@ -23,7 +23,7 @@ class Frontend {
 
         // WooCommerce hooks for "My Account" page.
         add_filter( 'woocommerce_account_menu_items', [ $this, 'relovit_account_menu_items' ] );
-        add_action( 'init', [ __CLASS__, 'relovit_add_my_account_endpoint' ] );
+        add_action( 'init', [ $this, 'relovit_add_my_account_endpoint' ] );
         add_filter( 'query_vars', [ $this, 'relovit_add_query_vars' ], 0 );
         add_action( 'woocommerce_account_relovit-settings_endpoint', [ $this, 'relovit_settings_content' ] );
         add_action( 'woocommerce_account_relovit-products_endpoint', [ $this, 'relovit_products_content' ] );
@@ -69,7 +69,7 @@ class Frontend {
     /**
      * Add endpoint for the "Relovit Settings" page.
      */
-    public static function relovit_add_my_account_endpoint() {
+    public function relovit_add_my_account_endpoint() {
         add_rewrite_endpoint( 'relovit-settings', EP_PAGES );
         add_rewrite_endpoint( 'relovit-products', EP_PAGES );
     }
@@ -357,7 +357,6 @@ class Frontend {
                     'relovit-edit-product',
                     'relovit_edit_product',
                     [
-                        'ajax_url'           => admin_url( 'admin-ajax.php' ),
                         'api_url'            => esc_url_raw( rest_url( 'relovit/v1/enrich-product' ) ),
                         'nonce'              => wp_create_nonce( 'wp_rest' ),
                         'product_id'         => intval( $_GET['product_id'] ),
