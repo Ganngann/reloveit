@@ -100,7 +100,7 @@ class Frontend {
         $product = wc_get_product( $product_id );
 
         // Security check: Ensure the product exists and belongs to the current user.
-        if ( ! $product || $product->get_author() != get_current_user_id() ) {
+        if ( ! $product || get_post_field( 'post_author', $product->get_id() ) != get_current_user_id() ) {
             wc_add_notice( __( 'Invalid product.', 'relovit' ), 'error' );
             return;
         }
@@ -164,7 +164,7 @@ class Frontend {
         $product = wc_get_product( $product_id );
 
         // Security check: Ensure the product exists and belongs to the current user.
-        if ( ! $product || $product->get_author() != get_current_user_id() ) {
+        if ( ! $product || get_post_field( 'post_author', $product->get_id() ) != get_current_user_id() ) {
             wc_add_notice( __( 'Invalid product.', 'relovit' ), 'error' );
             echo '<a href="' . esc_url( wc_get_account_endpoint_url( 'relovit-products' ) ) . '">' . __( 'Go back to your products', 'relovit' ) . '</a>';
             return;
