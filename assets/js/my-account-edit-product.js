@@ -15,10 +15,10 @@
                 return;
             }
 
-            const data = {
-                'product_id': relovit_edit_product.product_id,
-                'relovit_tasks': tasks,
-            };
+            const form = $('#relovit-edit-product-form');
+            const formData = new FormData(form[0]);
+            formData.append('relovit_tasks', tasks);
+            formData.append('product_id', relovit_edit_product.product_id);
 
             spinner.show();
             enrichBtn.prop('disabled', true);
@@ -26,21 +26,14 @@
             $.ajax({
                 url: relovit_edit_product.api_url,
                 type: 'POST',
-                data: JSON.stringify(data),
-                contentType: 'application/json; charset=utf-8',
+                data: formData,
+                processData: false,
+                contentType: false,
                 beforeSend: function (xhr) {
                     xhr.setRequestHeader('X-WP-Nonce', relovit_edit_product.nonce);
                 },
                 success: function (response) {
                     if (response.success) {
-                        const product = response.data.product;
-                        if (product.description) {
-                            $('#relovit_product_description').val(product.description);
-                        }
-                        if (product.price) {
-                            $('#relovit_product_price').val(product.price);
-                        }
-                        // Reload to see all changes, including category and image.
                         location.reload();
                     } else {
                         alert(response.data.message);

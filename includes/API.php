@@ -274,7 +274,7 @@ class API {
 
     public function enrich_product( $request ) {
         $product_id = $request->get_param( 'product_id' );
-        $tasks      = $request->get_param( 'relovit_tasks' ) ?: [];
+        $tasks      = $request->get_param( 'relovit_tasks' );
 
         if ( empty( $product_id ) ) {
             return new \WP_Error( 'no_product_id', 'No product ID was provided.', [ 'status' => 400 ] );
@@ -288,6 +288,7 @@ class API {
         if ( ! $product ) {
             return new \WP_Error( 'product_not_found', 'The specified product could not be found.', [ 'status' => 404 ] );
         }
+
 
         // Get all image paths associated with the product.
         $image_paths = [];
