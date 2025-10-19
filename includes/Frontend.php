@@ -114,7 +114,15 @@ class Frontend {
         $product->set_regular_price( $price );
 
         $this->relovit_handle_image_uploads( $product );
-        $product->save();
+
+        if ( isset( $_POST['relovit_enrich'] ) ) {
+            $api = new \Relovit\API();
+            $request = new \WP_REST_Request( 'POST', '/relovit/v1/enrich-product' );
+            $request->set_body_params( $_POST );
+            $api->enrich_product( $request );
+        } else {
+            $product->save();
+        }
 
         if ( ! wp_doing_ajax() ) {
             wc_add_notice( __( 'Product saved successfully.', 'relovit' ), 'success' );
@@ -334,36 +342,33 @@ class Frontend {
                     </p>
                 </div>
             </div>
+            <div id="relovit-ai-enrichment" style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                <h3><?php esc_html_e( 'AI Enrichment', 'relovit' ); ?></h3>
+                <p><?php esc_html_e( 'Use AI to improve your product listing. Select the tasks you want to perform and click "Enrich with AI".', 'relovit' ); ?></p>
+                <div id="relovit-ai-tasks">
+                    <p>
+                        <label><input type="checkbox" name="relovit_tasks[]" value="description"> <?php esc_html_e( 'Generate Description', 'relovit' ); ?></label>
+                    </p>
+                    <p>
+                        <label><input type="checkbox" name="relovit_tasks[]" value="price"> <?php esc_html_e( 'Suggest Price', 'relovit' ); ?></label>
+                    </p>
+                    <p>
+                        <label><input type="checkbox" name="relovit_tasks[]" value="category"> <?php esc_html_e( 'Suggest Category', 'relovit' ); ?></label>
+                    </p>
+                    <p>
+                        <label><input type="checkbox" name="relovit_tasks[]" value="image"> <?php esc_html_e( 'Generate a new main image', 'relovit' ); ?></label>
+                    </p>
+                </div>
+                <div id="relovit-ai-spinner" style="display: none;">
+                    <p><?php esc_html_e( 'AI is working, please wait...', 'relovit' ); ?></p>
+                </div>
+            </div>
             <p>
                 <button type="submit" class="woocommerce-Button button" name="relovit_save_product" value="<?php esc_attr_e( 'Save changes', 'relovit' ); ?>"><?php esc_html_e( 'Save changes', 'relovit' ); ?></button>
+                <button type="button" id="relovit-enrich-btn" class="woocommerce-Button button"><?php esc_html_e( 'Enrich with AI', 'relovit' ); ?></button>
                 <input type="hidden" name="relovit_product_id" value="<?php echo esc_attr( $product_id ); ?>">
             </p>
         </form>
-
-        <div id="relovit-ai-enrichment" style="margin-top: 30px; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-            <h3><?php esc_html_e( 'AI Enrichment', 'relovit' ); ?></h3>
-            <p><?php esc_html_e( 'Use AI to improve your product listing. Select the tasks you want to perform and click "Enrich with AI".', 'relovit' ); ?></p>
-            <div id="relovit-ai-tasks">
-                <p>
-                    <label><input type="checkbox" name="relovit_tasks[]" value="description"> <?php esc_html_e( 'Generate Description', 'relovit' ); ?></label>
-                </p>
-                <p>
-                    <label><input type="checkbox" name="relovit_tasks[]" value="price"> <?php esc_html_e( 'Suggest Price', 'relovit' ); ?></label>
-                </p>
-                <p>
-                    <label><input type="checkbox" name="relovit_tasks[]" value="category"> <?php esc_html_e( 'Suggest Category', 'relovit' ); ?></label>
-                </p>
-                <p>
-                    <label><input type="checkbox" name="relovit_tasks[]" value="image"> <?php esc_html_e( 'Generate a new main image', 'relovit' ); ?></label>
-                </p>
-            </div>
-            <p>
-                <button type="button" id="relovit-enrich-btn" class="woocommerce-Button button"><?php esc_html_e( 'Enrich with AI', 'relovit' ); ?></button>
-            </p>
-            <div id="relovit-ai-spinner" style="display: none;">
-                <p><?php esc_html_e( 'AI is working, please wait...', 'relovit' ); ?></p>
-            </div>
-        </div>
 
         <?php
     }

@@ -3,7 +3,7 @@
  * Plugin Name:       Relovit
  * Plugin URI:        https://gann.be/
  * Description:       Utilise l'IA (Gemini) pour identifier des objets dans une image et créer des fiches produits dans WooCommerce.
- * Version:           1.5.0
+ * Version:           1.5.1
  * Author:            Morgan Schaefer
  * Author URI:        https://gann.be/
  * License:           GPL v2 or later
@@ -17,7 +17,7 @@ if ( ! defined( 'WPINC' ) ) {
     die;
 }
 
-define( 'RELOVIT_VERSION', '1.5.0' );
+define( 'RELOVIT_VERSION', '1.5.1' );
 define( 'RELOVIT_PLUGIN_FILE', __FILE__ );
 
 // Include the main plugin class.
